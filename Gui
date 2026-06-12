@@ -151,7 +151,7 @@ function ACTED:CreateWindow(config)
 
     -- ScreenGui
     local ScreenGui = Create("ScreenGui", {
-        Name             = "ACTEDLib_" .. tostring(math.random(1e6)),
+        Name             = "ACTED_" .. tostring(math.random(1e6)),
         ResetOnSpawn     = false,
         ZIndexBehavior   = Enum.ZIndexBehavior.Sibling,
         DisplayOrder     = 999,
