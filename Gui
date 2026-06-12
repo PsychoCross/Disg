@@ -6,8 +6,8 @@
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝ ╚═╝╚══════╝╚══════╝╚═════╝
 -- Version: 2.0 | Mobile Compatible | Full Animated | Occult Theme
 
-local Disguised = {}
-Disguised.__index = Disguised
+local ACTED = {}
+ACTED.__index = ACTED
 
 -- Services
 local Players = game:GetService("Players")
@@ -101,7 +101,6 @@ local function MakeDraggable(frame, handle)
     end)
 end
 
--- Glow / Shadow stroke helper
 local function AddStroke(parent, color, thickness, transparency)
     return Create("UIStroke", {
         Parent = parent,
@@ -126,7 +125,6 @@ local function AddPadding(parent, top, bottom, left, right)
     })
 end
 
--- Animate glow pulse on a UIStroke
 local function PulseGlow(stroke, color1, color2, speed)
     color1 = color1 or Theme.Border
     color2 = color2 or Theme.BorderGlow
@@ -143,32 +141,9 @@ local function PulseGlow(stroke, color1, color2, speed)
 end
 
 -- ============================================================
--- LOGO SVG-like frame (cross + wings + fedora via ImageLabel or drawn)
--- ============================================================
-local LOGO_SVG = [[
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Wings left -->
-  <path d="M2 34 Q10 20 20 28 Q14 34 10 38 Z" fill="#8c3ddc" opacity="0.85"/>
-  <path d="M2 34 Q8 38 12 44 Q8 40 5 42 Z" fill="#6a2aaa" opacity="0.7"/>
-  <!-- Wings right -->
-  <path d="M62 34 Q54 20 44 28 Q50 34 54 38 Z" fill="#8c3ddc" opacity="0.85"/>
-  <path d="M62 34 Q56 38 52 44 Q56 40 59 42 Z" fill="#6a2aaa" opacity="0.7"/>
-  <!-- Inverted Cross -->
-  <rect x="29" y="18" width="6" height="28" rx="1" fill="#c87eff"/>
-  <rect x="22" y="32" width="20" height="6" rx="1" fill="#c87eff"/>
-  <!-- Fedora brim -->
-  <ellipse cx="32" cy="20" rx="14" ry="4" fill="#1a1228"/>
-  <rect x="22" y="11" width="20" height="10" rx="5" fill="#1a1228"/>
-  <!-- Jacket collar hints -->
-  <path d="M24 48 L32 44 L40 48 L38 58 L32 55 L26 58 Z" fill="#120d1e" stroke="#6a2aaa" stroke-width="1"/>
-  <path d="M32 44 L32 55" stroke="#8c3ddc" stroke-width="1"/>
-</svg>
-]]
-
--- ============================================================
 -- MAIN LIBRARY: CreateWindow
 -- ============================================================
-function Disguised:CreateWindow(config)
+function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
     local SubTitle = config.SubTitle or "v2.0 | occult"
@@ -176,7 +151,7 @@ function Disguised:CreateWindow(config)
 
     -- ScreenGui
     local ScreenGui = Create("ScreenGui", {
-        Name             = "DisguisedLib_" .. tostring(math.random(1e6)),
+        Name             = "ACTEDLib_" .. tostring(math.random(1e6)),
         ResetOnSpawn     = false,
         ZIndexBehavior   = Enum.ZIndexBehavior.Sibling,
         DisplayOrder     = 999,
@@ -187,11 +162,9 @@ function Disguised:CreateWindow(config)
         ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     end
 
-    -- Blur background effect (subtle)
     local blur = Create("BlurEffect", {Parent = game:GetService("Lighting"), Size = 0})
     Tween(blur, {Size = 4}, 0.5)
 
-    -- Main container (entry animation)
     local Main = Create("Frame", {
         Name            = "Main",
         Parent          = ScreenGui,
@@ -205,12 +178,10 @@ function Disguised:CreateWindow(config)
     local mainStroke = AddStroke(Main, Theme.Border, 1.5)
     PulseGlow(mainStroke, Theme.Border, Theme.BorderGlow, 1.2)
 
-    -- Entry tween
     Main.Size = UDim2.new(0, 0, 0, 0)
     Main.BackgroundTransparency = 1
     Tween(Main, {Size = Size, BackgroundTransparency = 0}, 0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-    -- Ambient gradient overlay
     local Gradient = Create("Frame", {
         Parent = Main,
         Size   = UDim2.new(1,0,1,0),
@@ -232,9 +203,6 @@ function Disguised:CreateWindow(config)
         }),
     })
 
-    -- =====================
-    -- TAB BAR (declared first so minimize can reference it)
-    -- =====================
     local TabBar = Create("ScrollingFrame", {
         Parent = Main,
         Position = UDim2.new(0,0,0,52),
@@ -254,7 +222,6 @@ function Disguised:CreateWindow(config)
     })
     AddPadding(TabBar,6,6,6,6)
 
-    -- Separator line
     local Separator = Create("Frame", {
         Parent = Main,
         Position = UDim2.new(0,130,0,52),
@@ -264,7 +231,6 @@ function Disguised:CreateWindow(config)
         ZIndex = 2,
     })
 
-    -- CONTENT AREA (declared before TopBar buttons so minimize can reference)
     local ContentHolder = Create("Frame", {
         Parent = Main,
         Position = UDim2.new(0,135,0,58),
@@ -274,7 +240,6 @@ function Disguised:CreateWindow(config)
         ZIndex = 2,
     })
 
-    -- TOP BAR (on top so ZIndex renders correctly)
     local TopBar = Create("Frame", {
         Parent           = Main,
         Size             = UDim2.new(1,0,0,52),
@@ -282,7 +247,7 @@ function Disguised:CreateWindow(config)
         ZIndex           = 10,
     })
     Create("UICorner", {Parent = TopBar, CornerRadius = UDim.new(0,14)})
-    -- Square off bottom corners (hidden when minimized)
+    
     local TopBarSquare = Create("Frame", {
         Parent = TopBar,
         Size   = UDim2.new(1,0,0.5,0),
@@ -292,7 +257,6 @@ function Disguised:CreateWindow(config)
         ZIndex = 9,
     })
 
-    -- Logo (ImageLabel with Roblox asset)
     local LogoFrame = Create("Frame", {
         Parent = TopBar,
         Size   = UDim2.new(0,44,0,44),
@@ -303,7 +267,6 @@ function Disguised:CreateWindow(config)
     AddCorner(LogoFrame, 10)
     local logoStroke = AddStroke(LogoFrame, Theme.Accent, 1.5)
 
-    -- Roblox image logo
     Create("ImageLabel", {
         Parent = LogoFrame,
         Size   = UDim2.new(1,-4,1,-4),
@@ -314,8 +277,7 @@ function Disguised:CreateWindow(config)
         ZIndex = 12,
     })
 
-    -- Pulse logo stroke
-    spawn(function()
+    task.spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
             if not logoStroke or not logoStroke.Parent then return end
@@ -325,7 +287,6 @@ function Disguised:CreateWindow(config)
         end)
     end)
 
-    -- Title text
     Create("TextLabel", {
         Parent = TopBar,
         Position = UDim2.new(0,58,0,6),
@@ -351,7 +312,6 @@ function Disguised:CreateWindow(config)
         ZIndex   = 11,
     })
 
-    -- Helper: make a topbar button matching GUI style
     local function MakeTopBtn(xOffset, label, accentColor)
         local btn = Create("TextButton", {
             Parent = TopBar,
@@ -376,7 +336,6 @@ function Disguised:CreateWindow(config)
         return btn
     end
 
-    -- Close button: X, styled to match GUI (no loud red)
     local CloseBtn = MakeTopBtn(-36, "x", Color3.fromRGB(200, 80, 100))
     CloseBtn.MouseButton1Click:Connect(function()
         Tween(Main, {Size=UDim2.new(0,0,0,0), BackgroundTransparency=1}, 0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In)
@@ -384,7 +343,6 @@ function Disguised:CreateWindow(config)
         task.delay(0.35, function() ScreenGui:Destroy() end)
     end)
 
-    -- Minimize button: - / +
     local minimized = false
     local originalSize = Size
     local MinBtn = MakeTopBtn(-70, "-", Theme.TextSecondary)
@@ -392,21 +350,15 @@ function Disguised:CreateWindow(config)
     MinBtn.MouseButton1Click:Connect(function()
         minimized = not minimized
         if minimized then
-            -- Hide body FIRST, then shrink
             TabBar.Visible        = false
             ContentHolder.Visible = false
             Separator.Visible     = false
-            -- Hide the square-patch so Main's UICorner rounds all 4 corners
             TopBarSquare.Visible  = false
-            Tween(Main, {
-    Size = UDim2.new(0, 180, 0, 52)
-}, 0.25)
+            Tween(Main, {Size = UDim2.new(0, 180, 0, 52)}, 0.25)
             MinBtn.Text = "+"
             MinBtn.TextColor3 = Theme.Accent
         else
-            -- Restore square-patch first (body is still hidden)
             TopBarSquare.Visible  = true
-            -- Expand, then reveal body
             MinBtn.Text = "-"
             MinBtn.TextColor3 = Theme.TextSecondary
             Tween(Main, {Size = originalSize}, 0.3, Enum.EasingStyle.Back)
@@ -422,7 +374,6 @@ function Disguised:CreateWindow(config)
 
     MakeDraggable(Main, TopBar)
 
-    -- Window object
     local Window = {}
     Window._tabs = {}
     Window._activeTab = nil
@@ -433,7 +384,6 @@ function Disguised:CreateWindow(config)
     function Window:CreateTab(name, icon)
         local tabData = {_sections = {}}
 
-        -- Tab button
         local TabBtn = Create("TextButton", {
             Parent = TabBar,
             Size   = UDim2.new(1,0,0,36),
@@ -449,7 +399,6 @@ function Disguised:CreateWindow(config)
         AddCorner(TabBtn,8)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
 
-        -- Content page
         local Page = Create("ScrollingFrame", {
             Parent = ContentHolder,
             Size   = UDim2.new(1,0,1,0),
@@ -466,20 +415,17 @@ function Disguised:CreateWindow(config)
         AddPadding(Page,4,4,2,6)
 
         local function Activate()
-            -- Deactivate all
             for _, t in ipairs(Window._tabs) do
                 Tween(t._btn, {BackgroundColor3=Theme.SurfaceAlt, BackgroundTransparency=0.4}, 0.2)
                 Tween(t._stroke, {Transparency=0.5}, 0.2)
                 t._btn.TextColor3 = Theme.TextSecondary
                 t._page.Visible = false
             end
-            -- Activate this
             Tween(TabBtn, {BackgroundColor3=Theme.Accent, BackgroundTransparency=0}, 0.2)
             Tween(tabStroke, {Transparency=0}, 0.2)
             TabBtn.TextColor3 = Theme.TextPrimary
             Page.Visible = true
             Window._activeTab = tabData
-            -- Slide in
             Page.Position = UDim2.new(-0.1,0,0,0)
             Tween(Page, {Position=UDim2.new(0,0,0,0)}, 0.2, Enum.EasingStyle.Quart)
         end
@@ -527,7 +473,6 @@ function Disguised:CreateWindow(config)
                     TextXAlignment = Enum.TextXAlignment.Left,
                     ZIndex = 3,
                 })
-                -- section title underline
                 Create("Frame",{
                     Parent=SFrame,
                     Size=UDim2.new(1,0,0,1),
@@ -537,7 +482,6 @@ function Disguised:CreateWindow(config)
                 })
             end
 
-            -- Row helper
             local function MakeRow(height)
                 height = height or 32
                 local row = Create("Frame",{
@@ -549,9 +493,7 @@ function Disguised:CreateWindow(config)
                 return row
             end
 
-            -- =====================
             -- BUTTON
-            -- =====================
             function Section:AddButton(label, callback)
                 callback = callback or function() end
                 local row = MakeRow(34)
@@ -569,7 +511,6 @@ function Disguised:CreateWindow(config)
                 AddCorner(Btn,8)
                 local bStroke = AddStroke(Btn,Theme.Border,1.2)
 
-                -- Ripple
                 local function Ripple(x,y)
                     local rip = Create("Frame",{
                         Parent=Btn,
@@ -603,9 +544,7 @@ function Disguised:CreateWindow(config)
                 return Btn
             end
 
-            -- =====================
             -- TOGGLE
-            -- =====================
             function Section:AddToggle(label, default, callback)
                 callback = callback or function() end
                 local state = default or false
@@ -668,9 +607,7 @@ function Disguised:CreateWindow(config)
                 return obj
             end
 
-            -- =====================
             -- SLIDER
-            -- =====================
             function Section:AddSlider(label, min, max, default, callback)
                 min = min or 0; max = max or 100
                 default = math.clamp(default or min, min, max)
@@ -770,9 +707,7 @@ function Disguised:CreateWindow(config)
                 return obj
             end
 
-            -- =====================
             -- TEXTBOX
-            -- =====================
             function Section:AddTextbox(label, placeholder, default, callback)
                 callback = callback or function() end
                 local row = MakeRow(54)
@@ -823,9 +758,7 @@ function Disguised:CreateWindow(config)
                 return {Value=Box.Text, Get=function() return Box.Text end, Set=function(v) Box.Text=v end}
             end
 
-            -- =====================
             -- DROPDOWN
-            -- =====================
             function Section:AddDropdown(label, options, default, callback)
                 callback = callback or function() end
                 options = options or {}
@@ -854,7 +787,6 @@ function Disguised:CreateWindow(config)
                 AddCorner(DDBtn,7)
                 local ddStroke=AddStroke(DDBtn,Theme.Border,1)
 
-                -- Dropdown list (rendered in ContentHolder to avoid clipping)
                 local DDList = Create("Frame",{
                     Parent=ContentHolder,
                     Size=UDim2.new(0,DDBtn.AbsoluteSize.X,0,0),
@@ -938,9 +870,7 @@ function Disguised:CreateWindow(config)
                 }
             end
 
-            -- =====================
-            -- COLORPICKER (simple)
-            -- =====================
+            -- COLORPICKER
             function Section:AddColorPicker(label, default, callback)
                 callback = callback or function() end
                 default = default or Color3.fromRGB(140,60,220)
@@ -964,7 +894,6 @@ function Disguised:CreateWindow(config)
                 AddStroke(Swatch,Theme.Border,1)
 
                 local hue,sat,val = Color3.toHSV(default)
-
                 local CPOpen=false
                 local CPFrame = Create("Frame",{
                     Parent=ContentHolder,
@@ -976,7 +905,6 @@ function Disguised:CreateWindow(config)
                 AddCorner(CPFrame,10)
                 AddStroke(CPFrame,Theme.Accent,1.2)
 
-                -- Hue slider
                 local HueTrack=Create("Frame",{
                     Parent=CPFrame,Position=UDim2.new(0,8,0,10),
                     Size=UDim2.new(1,-16,0,14),
@@ -1001,7 +929,6 @@ function Disguised:CreateWindow(config)
                 })
                 AddCorner(HueThumb,999)
 
-                -- Brightness slider
                 local BrtTrack=Create("Frame",{
                     Parent=CPFrame,Position=UDim2.new(0,8,0,34),
                     Size=UDim2.new(1,-16,0,14),
@@ -1027,7 +954,7 @@ function Disguised:CreateWindow(config)
                     end
                 end)
                 UserInputService.InputEnded:Connect(function(inp)
-                    if inp.UserInputType==Enum.UserInputType.MouseButton1 then hSliding=false end
+                    if inp.UserInputType==Enum.MouseButton1 then hSliding=false end
                 end)
 
                 local SwatchBtn=Create("TextButton",{Parent=row,Size=UDim2.new(0,34,1,0),Position=UDim2.new(1,-36,0,0),BackgroundTransparency=1,Text="",ZIndex=5})
@@ -1044,9 +971,7 @@ function Disguised:CreateWindow(config)
                 return {Get=function() return Color3.fromHSV(hue,sat,val) end}
             end
 
-            -- =====================
             -- LABEL
-            -- =====================
             function Section:AddLabel(text, color)
                 local row = MakeRow(22)
                 Create("TextLabel",{
@@ -1059,9 +984,7 @@ function Disguised:CreateWindow(config)
                 })
             end
 
-            -- =====================
             -- KEYBIND
-            -- =====================
             function Section:AddKeybind(label, default, callback)
                 callback = callback or function() end
                 default  = default  or Enum.KeyCode.RightShift
@@ -1105,9 +1028,7 @@ function Disguised:CreateWindow(config)
                 return {Get=function() return key end}
             end
 
-            -- =====================
             -- DIVIDER
-            -- =====================
             function Section:AddDivider()
                 local row=MakeRow(10)
                 Create("Frame",{
@@ -1119,10 +1040,10 @@ function Disguised:CreateWindow(config)
 
             table.insert(tabData._sections, Section)
             return Section
-        end -- CreateSection
+        end
 
         return tabData
-    end -- CreateTab
+    end
 
     -- Notification system
     function Window:Notify(title, message, ntype, duration)
@@ -1135,25 +1056,24 @@ function Disguised:CreateWindow(config)
             warning = Theme.Warning,
             error   = Theme.Danger,
         }
-        local icons = {info="ℹ", success="✓", warning="", error=""}
+        local icons = {info="ℹ", success="✓", warning="⚠", error="❌"}
         local col = colors[ntype] or Theme.Accent
 
         local NHolder = ScreenGui:FindFirstChild("NotifHolder") or Create("Frame",{
-    Name="NotifHolder",Parent=ScreenGui,
-    Position=UDim2.new(1, -270, 1, -300), -- Ridicat mai sus pe ecran (Y: 1 minus 300 pixeli)
-    Size=UDim2.new(0, 250, 0, 280),       -- Ofertă o înălțime fixă în care să se propage listarea
-    BackgroundTransparency=1,
-    AnchorPoint=Vector2.new(0, 0),         -- Punct de ancorare standard (stânga-sus)
-})
-if not NHolder.Parent then NHolder.Parent=ScreenGui end
+            Name="NotifHolder",Parent=ScreenGui,
+            Position=UDim2.new(1, -270, 1, -300),
+            Size=UDim2.new(0, 250, 0, 280),
+            BackgroundTransparency=1,
+            AnchorPoint=Vector2.new(0, 0),
+        })
+        if not NHolder.Parent then NHolder.Parent=ScreenGui end
 
-local NLayout=NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLayout",{
-    Parent=NHolder,
-    VerticalAlignment=Enum.VerticalAlignment.Bottom, -- Notificările noi vor veni tot de jos în sus
-    SortOrder=Enum.SortOrder.LayoutOrder,
-    Padding=UDim.new(0,6),
-})
-
+        local NLayout=NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLayout",{
+            Parent=NHolder,
+            VerticalAlignment=Enum.VerticalAlignment.Bottom,
+            SortOrder=Enum.SortOrder.LayoutOrder,
+            Padding=UDim.new(0,6),
+        })
 
         local NFrame=Create("Frame",{
             Parent=NHolder,
@@ -1190,7 +1110,6 @@ local NLayout=NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLay
             TextWrapped=true,ZIndex=100,
         })
 
-        -- Progress bar
         local Prog=Create("Frame",{
             Parent=NFrame,Position=UDim2.new(0,0,1,-2),
             Size=UDim2.new(1,0,0,2),
@@ -1206,12 +1125,11 @@ local NLayout=NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLay
         end)
     end
 
-    -- Initial notification
     task.delay(0.6, function()
-        Window:Notify("Disguised", "Library loaded successfully.", "success", 3)
+        Window:Notify("ACTED", "Library loaded successfully.", "success", 3)
     end)
 
     return Window
 end
 
-return Disguised
+return ACTED
