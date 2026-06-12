@@ -1125,15 +1125,9 @@ function ACTED:CreateWindow(config)
         end)
     end
 
-        task.delay(0.6, function()
+    task.delay(0.6, function()
         Window:Notify("ACTED", "was loaded successfully.", "success", 3)
     end)
-
-    return Window
-end
-
-return ACTED
-
 
     return Window
 end
