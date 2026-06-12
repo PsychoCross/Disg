@@ -392,43 +392,49 @@ function Disguised:CreateWindow(config)
     MinBtn.MouseButton1Click:Connect(function()
         minimized = not minimized
         if minimized then
-            -- 1. Ascundem instant corpul principal și elementele despărțitoare
+            -- 1. Ascundem corpul ferestrei și elementele de legătură
             TabBar.Visible        = false
             ContentHolder.Visible = false
             Separator.Visible     = false
+            TopBarSquare.Visible  = false -- Ascundem patch-ul pătrat ca să avem colțuri rotunjite complet jos
             
-            -- 2. ASCUNDEM elementul pătrat de sub TopBar ca să lăsăm doar colțurile rotunjite ale Main-ului
-            TopBarSquare.Visible  = false
-            TopBar.BackgroundTransparency = 1 -- Facem fundalul TopBar transparent pentru a prelua forma rotunjită a Main-ului
+            -- 2. Animăm structura TopBar-ului pentru a se potrivi cu dimensiunea micșorată
+            Tween(TopBar, {Size = UDim2.new(0, 240, 0, 52)}, 0.25, Enum.EasingStyle.Quart)
+            
+            -- 3. Repoziționăm butoanele manual ca să nu mai zboare în afara ecranului sau să rămână blocate la 560px
+            Tween(CloseBtn, {Position = UDim2.new(0, 204, 0, 11)}, 0.25, Enum.EasingStyle.Quart)
+            Tween(MinBtn, {Position = UDim2.new(0, 170, 0, 11)}, 0.25, Enum.EasingStyle.Quart)
 
-            -- 3. Reducem lățimea ferestrei la una compactă (ex: 240px lățime, 52px înălțime)
-            -- Astfel, butoanele X și + se vor trage automat spre stânga, lângă nume!
+            -- 4. Micșorăm fereastra principală (Main) la o formă compactă de „pastilă”
             Tween(Main, {Size = UDim2.new(0, 240, 0, 52)}, 0.25, Enum.EasingStyle.Quart)
             
             MinBtn.Text = "+"
             MinBtn.TextColor3 = Theme.Accent
         else
-            -- 1. Revenim la setările vizuale normale ale barei de sus
-            TopBarSquare.Visible  = true
-            TopBar.BackgroundTransparency = 0
-            
-            -- 2. Extindem înapoi fereastra la dimensiunea originală (lățime și înălțime completă)
-            Tween(Main, {Size = originalSize}, 0.3, Enum.EasingStyle.Back)
-            
-            -- 3. Schimbăm textul butonului
+            -- 1. Readucem butoanele la pozițiile lor originale relative din dreapta ferestrei mari
+            Tween(CloseBtn, {Position = UDim2.new(1, -36, 0, 11)}, 0.25, Enum.EasingStyle.Quart)
+            Tween(MinBtn, {Position = UDim2.new(1, -70, 0, 11)}, 0.25, Enum.EasingStyle.Quart)
+
+            -- 2. Extindem fundalul TopBar-ului la lățimea inițială de 100%
+            Tween(TopBar, {Size = UDim2.new(1, 0, 0, 52)}, 0.25, Enum.EasingStyle.Quart)
+
+            -- 3. Extindem fereastra Main înapoi la dimensiunea completă
             MinBtn.Text = "-"
             MinBtn.TextColor3 = Theme.TextSecondary
+            Tween(Main, {Size = originalSize}, 0.3, Enum.EasingStyle.Back)
             
-            -- 4. Afișăm conținutul doar după ce animația s-a terminat ca să nu dea glitch-uri vizuale
+            -- 4. Afișăm conținutul înapoi după terminarea animației, asigurând un aspect curat
             task.delay(0.28, function()
                 if not minimized then
                     TabBar.Visible        = true
                     ContentHolder.Visible = true
                     Separator.Visible     = true
+                    TopBarSquare.Visible  = true -- Afișăm din nou fundalul pătrat jos ca să se lege de corp
                 end
             end)
         end
     end)
+
 
 
 
