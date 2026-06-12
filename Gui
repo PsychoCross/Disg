@@ -468,7 +468,7 @@ function ACTED:CreateWindow(config)
                     BackgroundTransparency = 1,
                     Text   = sTitle:upper(),
                     TextColor3 = Theme.Accent,
-                    Font   = Enum.Font.GothamBold,
+                    Font = Enum.Font.GothamBold,
                     TextSize = 10,
                     TextXAlignment = Enum.TextXAlignment.Left,
                     ZIndex = 3,
@@ -597,7 +597,7 @@ function ACTED:CreateWindow(config)
                     state = val
                     Tween(Track,{BackgroundColor3=state and Theme.ToggleOn or Theme.ToggleOff},0.2)
                     Tween(Knob,{Position=state and UDim2.new(0,27,0.5,-8) or UDim2.new(0,3,0.5,-8)},0.2,Enum.EasingStyle.Back)
-                    Tween(Indicator,{BackgroundColor3=state and Theme.Accent or Theme.TextDim},0.2)
+                    Tween(Indicator,{BackgroundColor3=state habits and Theme.Accent or Theme.TextDim},0.2)
                     callback(state)
                 end
 
@@ -1096,40 +1096,3 @@ function ACTED:CreateWindow(config)
             Parent=NFrame,Position=UDim2.new(0,14,0,6),
             Size=UDim2.new(1,-20,0,18),
             BackgroundTransparency=1,
-            Text=(icons[ntype] or "").. "  "..title,
-            TextColor3=col,Font=Enum.Font.GothamBold,TextSize=13,
-            TextXAlignment=Enum.TextXAlignment.Left,ZIndex=100,
-        })
-        Create("TextLabel",{
-            Parent=NFrame,Position=UDim2.new(0,14,0,24),
-            Size=UDim2.new(1,-20,0,30),
-            BackgroundTransparency=1,
-            Text=message,
-            TextColor3=Theme.TextSecondary,Font=Enum.Font.Gotham,TextSize=11,
-            TextXAlignment=Enum.TextXAlignment.Left,
-            TextWrapped=true,ZIndex=100,
-        })
-
-        local Prog=Create("Frame",{
-            Parent=NFrame,Position=UDim2.new(0,0,1,-2),
-            Size=UDim2.new(1,0,0,2),
-            BackgroundColor3=col,ZIndex=101,
-        })
-
-        Tween(NFrame,{Size=UDim2.new(1,0,0,60)},0.3,Enum.EasingStyle.Back)
-        Tween(Prog,{Size=UDim2.new(0,0,0,2)},duration,Enum.EasingStyle.Linear)
-
-        task.delay(duration,function()
-            Tween(NFrame,{BackgroundTransparency=1,Size=UDim2.new(1,0,0,0)},0.3)
-            task.delay(0.35,function() NFrame:Destroy() end)
-        end)
-    end
-
-    task.delay(0.6, function()
-        Window:Notify("ACTED", "was loaded successfully.", "success", 3)
-    end)
-
-    return Window
-end
-
-return ACTED
