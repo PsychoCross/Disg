@@ -1126,7 +1126,7 @@ function ACTED:CreateWindow(config)
     end
 
     task.delay(0.6, function()
-        Window:Notify("ACTED", "Library loaded successfully.", "success", 3)
+        Window:Notify("ACTED", "was loaded successfully.", "success", 3)
     end)
 
     return Window
