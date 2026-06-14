@@ -1393,7 +1393,7 @@ function ACTED:CreateWindow(config)
             SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8),
         })
 
-        -- Outer wrapper controls slide/fade animation; inner frame controls height reveal.
+        -- Outer wrapper controls slide animation; inner frame is fully opaque for readability.
         local NWrap = Create("Frame", {
             Parent = NHolder, Size = UDim2.new(1, 0, 0, 64),
             Position = UDim2.new(1.4, 0, 0, 0),  -- start off-screen to the right
@@ -1403,27 +1403,13 @@ function ACTED:CreateWindow(config)
         local NFrame = Create("Frame", {
             Parent = NWrap, Size = UDim2.new(1, 0, 1, 0),
             BackgroundColor3 = Theme.Surface,
-            BackgroundTransparency = 0.06,
+            BackgroundTransparency = 0,   -- fully opaque, readable on any background
             ClipsDescendants = true, ZIndex = 200,
         })
         AddCorner(NFrame, 12)
         local nStroke = AddStroke(NFrame, col, 1.4, 0.2)
 
-        -- Subtle glass gradient overlay
-        Create("UIGradient", {
-            Parent = NFrame,
-            Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-                ColorSequenceKeypoint.new(1, Theme.Surface),
-            }),
-            Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.94),
-                NumberSequenceKeypoint.new(1, 1),
-            }),
-            Rotation = 90,
-        })
-
-        -- Left accent bar with glow
+        -- Left accent bar
         local accent = Create("Frame", {
             Parent = NFrame, Size = UDim2.new(0, 4, 1, 0),
             BackgroundColor3 = col, ZIndex = 202, BorderSizePixel = 0,
@@ -1434,11 +1420,11 @@ function ACTED:CreateWindow(config)
         local iconHolder = Create("Frame", {
             Parent = NFrame, Position = UDim2.new(0, 12, 0, 12),
             Size = UDim2.new(0, 28, 0, 28),
-            BackgroundColor3 = col, BackgroundTransparency = 0.82,
+            BackgroundColor3 = col, BackgroundTransparency = 0.78,
             ZIndex = 201,
         })
         AddCorner(iconHolder, 8)
-        AddStroke(iconHolder, col, 1, 0.4)
+        AddStroke(iconHolder, col, 1, 0.3)
         Create("TextLabel", {
             Parent = iconHolder, Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1, Text = icon,
@@ -1463,7 +1449,7 @@ function ACTED:CreateWindow(config)
         local ProgTrack = Create("Frame", {
             Parent = NFrame, Position = UDim2.new(0, 0, 1, -3),
             Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = Theme.SurfaceAlt,
-            BackgroundTransparency = 0.3, ZIndex = 202, BorderSizePixel = 0,
+            BackgroundTransparency = 0, ZIndex = 202, BorderSizePixel = 0,
         })
         local Prog = Create("Frame", {
             Parent = ProgTrack, Size = UDim2.new(1, 0, 1, 0),
@@ -1487,10 +1473,9 @@ function ACTED:CreateWindow(config)
         -- Countdown progress shrink
         Tween(Prog, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
 
-        -- Exit: slide out + fade
+        -- Exit: slide out (background stays opaque the whole time, no fade-to-transparent)
         task.delay(duration, function()
             Tween(NWrap, {Position = UDim2.new(1.4, 0, 0, 0)}, 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-            Tween(NFrame, {BackgroundTransparency = 1}, 0.3)
             task.delay(0.4, function() NWrap:Destroy() end)
         end)
     end
