@@ -4,7 +4,7 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.2 | Fixes: Slider float, Dropdown scroll/tab/no-autoselect, Multi-slot Config Manager
+-- Version: 2.3 | Fixes: Slider float, Dropdown click-through, Config refresh, Multi-slot Config Manager
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -187,7 +187,7 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.2 | occult"
+    local SubTitle = config.SubTitle or "v2.3 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
     local _configData = {}
@@ -493,58 +493,13 @@ function ACTED:CreateWindow(config)
             end
         end
 
-        -- ---- Internal: build the dropdown with dynamic option refresh ----
-        -- We need a custom dropdown variant here since AddDropdown options
-        -- are fixed at creation time. We'll replicate the pattern inline.
-        do
-            local open      = false
-            local rowHeight = 34
-            local options   = slotList
-
-            -- Row frame
-            local SFrame = section._sframe   -- we need the section's parent frame
-            -- We access the MakeRow helper by creating directly on the section's inner page
-            -- Use section:AddLabel as a reference point, then create the control manually
-            -- Since Section doesn't expose MakeRow, we replicate it cleanly:
-
-            local function GetSectionFrame()
-                -- Walk up from section's label-returned frame parent
-                -- The simplest approach: section:AddButton returns a TextButton
-                -- whose Parent.Parent is SFrame. We create a dummy, get SFrame, destroy dummy.
-                local dummyRow = Create("Frame", {
-                    Parent = nil, Size = UDim2.new(1, 0, 0, 0),
-                    BackgroundTransparency = 1,
-                })
-                -- Just try to find the ScrollingFrame page that is visible
-                -- Actually we will parent the dropdown row to the section by using the
-                -- AddLabel approach: AddLabel returns nothing but inserts into SFrame.
-                -- Let's use a different strategy -- create a "placeholder" label row and
-                -- grab its parent.
-                return nil
-            end
-            -- The cleanest approach without modifying internals:
-            -- We simply chain section:AddDropdown but we will later provide a .SetOptions method
-            -- by wrapping it. Because the built-in AddDropdown has fixed options, we extend it.
-
-            -- For the live slot list we call section:AddDropdown and attach SetOptions below.
-            slotDropdown = section:AddDropdown(
-                "Select slot",
-                slotList,
-                nil,   -- no pre-selection
-                function(v) selectedSlot = v end
-            )
-
-            -- Attach a SetOptions method so we can refresh
-            local _btnRef  = nil  -- we can't access DDBtn from outside, so we proxy through ddObj.Set
-            function slotDropdown.SetOptions(newOptions, keepSelected)
-                options    = newOptions
-                -- The only way to reflect new options without a rebuild is to
-                -- call ddObj.Set with a valid value or nil; the label updates.
-                -- True live-reload would need internal access, so we signal the user
-                -- to look at the refreshed list:
-                slotDropdown.Set(keepSelected)
-            end
-        end
+        -- Dropdown for slot list — uses the real AddDropdown which already has SetOptions
+        slotDropdown = section:AddDropdown(
+            "Select slot",
+            slotList,
+            nil,  -- no pre-selection
+            function(v) selectedSlot = v end
+        )
 
         -- ---- Action buttons ----
         section:AddButton("Save to slot", function()
@@ -1015,8 +970,9 @@ function ACTED:CreateWindow(config)
                     if _openDropdown and _openDropdown.list == DDList then
                         _openDropdown = nil
                     end
-                    Tween(DDList, {Size = UDim2.new(0, DDList.Size.X.Offset, 0, 0)}, 0.18, Enum.EasingStyle.Quart)
-                    task.delay(0.2, function() DDList.Visible = false end)
+                    -- Set invisible immediately so it never blocks clicks underneath
+                    DDList.Visible = false
+                    DDList.Size    = UDim2.new(0, DDList.Size.X.Offset, 0, 0)
                     DDBtn.Text = BtnLabel()
                 end
 
@@ -1386,47 +1342,27 @@ return ACTED
 
 --[[
 ========================================
-CHANGELOG v2.2
+CHANGELOG v2.3
 ========================================
 
-NEW: MULTI-SLOT CONFIG MANAGER
-  Call Window:AddConfigManager(section) inside any section to embed a full
-  config management panel. No emojis, English only.
+FIX: CONFIG DROPDOWN REFRESH
+  AddConfigManager now uses the real ddObj.SetOptions (defined in AddDropdown)
+  instead of a fake override that only called ddObj.Set. After Save/Delete/Refresh
+  the dropdown list now correctly rebuilds with the new slot names.
 
-  Panel contains:
-    - Slot name textbox       (type a new name to create a slot)
-    - Select slot dropdown    (lists all existing saved slots; auto-refreshed)
-    - Save to slot button     (saves current values to typed name or selected slot)
-    - Load selected slot button
-    - Delete selected slot button
-    - Refresh slot list button (re-reads ACTED_slots.json from disk)
+FIX: DROPDOWN BLOCKS CLICKS ON ELEMENTS UNDERNEATH
+  CloseDD now sets DDList.Visible = false and Size = 0 immediately and
+  synchronously, instead of hiding it with a 0.2s task.delay. The old
+  approach left an invisible-but-still-interactive frame over the UI for
+  200ms, which swallowed clicks on buttons, toggles and sliders below.
+  The open animation is kept; only the close removes the delay.
 
-  Slots are tracked in ACTED_slots.json so the dropdown always knows what
-  exists without scanning the filesystem.
-
-  Example usage:
-    local configTab     = Window:CreateTab("Config")
-    local configSection = configTab:CreateSection("Config Manager")
-    Window:AddConfigManager(configSection)
-
-  Existing AddButton save/load approach still works:
-    section:AddButton("Save", function() Window:SaveConfig("slot1") end)
-    section:AddButton("Load", function() Window:LoadConfig("slot1") end)
-
-NEW: Dropdown:SetOptions(newOptions, keepSelected)
-  Dynamically rebuilds the option list inside any existing dropdown.
-  Used internally by the config manager to refresh the slot list.
-  Also available on any dropdown you create yourself.
-
-  Example:
-    local dd = section:AddDropdown("Team", {"Red","Blue"}, nil, cb)
-    -- later:
-    dd.SetOptions({"Red","Blue","Green"}, "Blue")
-
-UNCHANGED from v2.1:
+UNCHANGED from v2.2:
+  - Multi-slot Config Manager (Window:AddConfigManager)
+  - Dropdown:SetOptions live rebuild
   - Slider float / decimals param
   - Dropdown scroll-safe, no auto-select, correct screen-space position
-  - Save/Load config with writefile / readfile / JSON
+  - Save/Load/Delete config with writefile / readfile / JSON + ACTED_slots.json
   - All element configKey params
-  - Notifications (icons removed per no-emoji rule)
+  - Notifications
 ]]
