@@ -4,7 +4,7 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.3 | Fixes: Slider float, Dropdown click-through, Config refresh, Multi-slot Config Manager
+-- Version: 2.4 | Fixes: Slider float, Dropdown overlay/click-through, Config refresh, Multi-slot Config Manager
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -187,7 +187,7 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.3 | occult"
+    local SubTitle = config.SubTitle or "v2.4 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
     local _configData = {}
@@ -947,6 +947,19 @@ function ACTED:CreateWindow(config)
                 AddCorner(DDBtn, 7)
                 local ddStroke = AddStroke(DDBtn, Theme.Border, 1)
 
+                -- Fullscreen overlay: sits at ZIndex 49, behind DDList (50) and its options (51).
+                -- When visible it catches every click outside the list and closes the dropdown.
+                -- It does NOT block anything while the dropdown is closed (Visible = false).
+                local Overlay = Create("TextButton", {
+                    Parent = ScreenGui,
+                    Size   = UDim2.new(1, 0, 1, 0),
+                    Position = UDim2.new(0, 0, 0, 0),
+                    BackgroundTransparency = 1,
+                    Text = "", ZIndex = 49,
+                    Visible = false,
+                    AutoButtonColor = false,
+                })
+
                 local DDList = Create("ScrollingFrame", {
                     Parent = ScreenGui,
                     Size = UDim2.new(0, 0, 0, 0),
@@ -970,11 +983,14 @@ function ACTED:CreateWindow(config)
                     if _openDropdown and _openDropdown.list == DDList then
                         _openDropdown = nil
                     end
-                    -- Set invisible immediately so it never blocks clicks underneath
-                    DDList.Visible = false
-                    DDList.Size    = UDim2.new(0, DDList.Size.X.Offset, 0, 0)
+                    Overlay.Visible = false
+                    DDList.Visible  = false
+                    DDList.Size     = UDim2.new(0, DDList.Size.X.Offset, 0, 0)
                     DDBtn.Text = BtnLabel()
                 end
+
+                -- Clicking anywhere on the overlay = close, no interference with the list
+                Overlay.MouseButton1Click:Connect(CloseDD)
 
                 local function BuildOptions(optList)
                     for _, c in ipairs(DDList:GetChildren()) do
@@ -1021,6 +1037,7 @@ function ACTED:CreateWindow(config)
                     DDList.Size     = UDim2.new(0, btnW, 0, 0)
                     DDList.Position = UDim2.new(0, absPos.X, 0, absPos.Y + btnSize.Y + 4)
                     DDList.Visible  = true
+                    Overlay.Visible = true
                     Tween(DDList, {Size = UDim2.new(0, btnW, 0, targetH)}, 0.2, Enum.EasingStyle.Back)
                     DDBtn.Text = (selected or "Select...") .. " ^"
                 end
@@ -1030,22 +1047,6 @@ function ACTED:CreateWindow(config)
                 end)
                 DDBtn.MouseEnter:Connect(function() Tween(ddStroke, {Color = Theme.Accent}, 0.15) end)
                 DDBtn.MouseLeave:Connect(function() Tween(ddStroke, {Color = Theme.Border}, 0.15) end)
-
-                UserInputService.InputBegan:Connect(function(input)
-                    if open and (input.UserInputType == Enum.UserInputType.MouseButton1
-                              or input.UserInputType == Enum.UserInputType.Touch) then
-                        task.defer(function()
-                            if open then
-                                local mp = UserInputService:GetMouseLocation()
-                                local lp = DDList.AbsolutePosition
-                                local ls = DDList.AbsoluteSize
-                                local inside = mp.X >= lp.X and mp.X <= lp.X + ls.X
-                                           and mp.Y >= lp.Y and mp.Y <= lp.Y + ls.Y
-                                if not inside then CloseDD() end
-                            end
-                        end)
-                    end
-                end)
 
                 local ddObj = {
                     Value = selected,
@@ -1342,27 +1343,39 @@ return ACTED
 
 --[[
 ========================================
-CHANGELOG v2.3
+CHANGELOG v2.4
 ========================================
 
-FIX: CONFIG DROPDOWN REFRESH
-  AddConfigManager now uses the real ddObj.SetOptions (defined in AddDropdown)
-  instead of a fake override that only called ddObj.Set. After Save/Delete/Refresh
-  the dropdown list now correctly rebuilds with the new slot names.
+FIX: DROPDOWN OPTION CLICKS WERE EATEN BY OUTSIDE-CLICK DETECTION
+  Root cause: a global UserInputService.InputBegan listener was checking whether
+  the mouse was "inside" DDList and closing the dropdown if not. Because
+  MouseButton1Click on an option fires AFTER InputBegan, the dropdown was
+  closing (and DDList disappearing) before the option's Click event had a
+  chance to fire, making it impossible to select any option that sat on top
+  of another interactive element (button, toggle, etc.).
 
-FIX: DROPDOWN BLOCKS CLICKS ON ELEMENTS UNDERNEATH
-  CloseDD now sets DDList.Visible = false and Size = 0 immediately and
-  synchronously, instead of hiding it with a 0.2s task.delay. The old
-  approach left an invisible-but-still-interactive frame over the UI for
-  200ms, which swallowed clicks on buttons, toggles and sliders below.
-  The open animation is kept; only the close removes the delay.
+  Fix: removed the InputBegan global listener entirely. Replaced it with a
+  fullscreen transparent TextButton (Overlay, ZIndex 49) that appears behind
+  the dropdown list (ZIndex 50) and its options (ZIndex 51) only while the
+  dropdown is open.
+    - Click on an option (ZIndex 51) -> option click fires first, CloseDD called inside
+    - Click anywhere else (ZIndex 49 overlay) -> overlay click fires, CloseDD called
+    - Everything behind the overlay (ZIndex < 49) is unaffected while closed
+
+  This guarantees the correct event order and no interference in either direction.
+
+FIX: CONFIG DROPDOWN REFRESH (v2.3)
+  AddConfigManager now uses ddObj.SetOptions correctly.
+
+FIX: DROPDOWN BLOCKS CLICKS WHEN CLOSED (v2.3)
+  CloseDD hides DDList and Overlay immediately and synchronously.
 
 UNCHANGED from v2.2:
   - Multi-slot Config Manager (Window:AddConfigManager)
   - Dropdown:SetOptions live rebuild
   - Slider float / decimals param
-  - Dropdown scroll-safe, no auto-select, correct screen-space position
-  - Save/Load/Delete config with writefile / readfile / JSON + ACTED_slots.json
+  - No auto-select on dropdown (nil default = "Select..." placeholder)
+  - Save/Load/Delete config + ACTED_slots.json tracking
   - All element configKey params
   - Notifications
 ]]
