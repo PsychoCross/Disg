@@ -4,7 +4,7 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.1 | Mobile Compatible | Full Animated | Occult Theme
+-- Version: 2.0 | Mobile Compatible | Full Animated | Occult Theme
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -147,10 +147,9 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.1 | occult"
+    local SubTitle = config.SubTitle or "v2.0 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
-    -- ScreenGui
     local ScreenGui = Create("ScreenGui", {
         Name             = "ACTEDLib_" .. tostring(math.random(1e6)),
         ResetOnSpawn     = false,
@@ -169,11 +168,11 @@ function ACTED:CreateWindow(config)
     local Main = Create("Frame", {
         Name            = "Main",
         Parent          = ScreenGui,
+        BackgroundColor3 = Theme.Background,
         Position        = UDim2.new(0.5, -280, 0.5, -210),
         Size            = Size,
         ClipsDescendants = true,
         BackgroundTransparency = 1,
-        BackgroundColor3 = Theme.Background,
     })
     AddCorner(Main, 14)
     local mainStroke = AddStroke(Main, Theme.Border, 1.5)
@@ -237,7 +236,7 @@ function ACTED:CreateWindow(config)
         Position = UDim2.new(0,135,0,58),
         Size     = UDim2.new(1,-140,1,-64),
         BackgroundTransparency = 1,
-        ClipsDescendants = false, -- Schimbat in false ca dropdownul sa poata pluti deasupra elementelor fara probleme
+        ClipsDescendants = true,
         ZIndex = 2,
     })
 
@@ -248,7 +247,6 @@ function ACTED:CreateWindow(config)
         ZIndex           = 10,
     })
     Create("UICorner", {Parent = TopBar, CornerRadius = UDim.new(0,14)})
-    
     local TopBarSquare = Create("Frame", {
         Parent = TopBar,
         Size   = UDim2.new(1,0,0.5,0),
@@ -278,7 +276,7 @@ function ACTED:CreateWindow(config)
         ZIndex = 12,
     })
 
-    task.spawn(function()
+    spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
             if not logoStroke or not logoStroke.Parent then return end
@@ -375,9 +373,78 @@ function ACTED:CreateWindow(config)
 
     MakeDraggable(Main, TopBar)
 
+    -- Window object
     local Window = {}
     Window._tabs = {}
     Window._activeTab = nil
+    Window.Flags = {} -- System Registry for Configs
+
+    -- =====================
+    -- CONFIG SYSTEM METHODS
+    -- =====================
+    function Window:SaveConfig(filename)
+        if not makefolder or not writefile then
+            Window:Notify("System", "Exploit-ul tau nu suporta file system!", "error", 3)
+            return
+        end
+        local folderName = Title
+        if not isfolder(folderName) then makefolder(folderName) end
+        if not isfolder(folderName .. "/configs") then makefolder(folderName .. "/configs") end
+
+        local data = {}
+        for flag, obj in pairs(Window.Flags) do
+            local val = obj:Get()
+            if typeof(val) == "Color3" then
+                data[flag] = {r = val.R, g = val.G, b = val.B, isColor = true}
+            elseif typeof(val) == "EnumItem" then
+                data[flag] = {val = val.Name, isKey = true}
+            else
+                data[flag] = val
+            end
+        end
+
+        local success = pcall(function()
+            writefile(folderName .. "/configs/" .. filename .. ".json", HttpService:JSONEncode(data))
+        end)
+        
+        if success then
+            Window:Notify("Config", "Configuratia a fost salvata: " .. filename, "success", 3)
+        else
+            Window:Notify("Error", "Nu s-a putut salva config-ul.", "error", 3)
+        end
+    end
+
+    function Window:LoadConfig(filename)
+        if not readfile or not isfile then return end
+        local path = Title .. "/configs/" .. filename .. ".json"
+        
+        if isfile(path) then
+            local success, data = pcall(function()
+                return HttpService:JSONDecode(readfile(path))
+            end)
+            
+            if success and type(data) == "table" then
+                for flag, val in pairs(data) do
+                    if Window.Flags[flag] then
+                        if type(val) == "table" then
+                            if val.isColor then
+                                Window.Flags[flag]:Set(Color3.new(val.r, val.g, val.b))
+                            elseif val.isKey then
+                                Window.Flags[flag]:Set(Enum.KeyCode[val.val])
+                            end
+                        else
+                            Window.Flags[flag]:Set(val)
+                        end
+                    end
+                end
+                Window:Notify("Config", "Configuratia a fost incarcata.", "success", 3)
+            else
+                Window:Notify("Error", "Fisier corupt sau invalid.", "error", 3)
+            end
+        else
+            Window:Notify("Warning", "Configuratia nu a fost gasita.", "warning", 3)
+        end
+    end
 
     -- =====================
     -- CreateTab
@@ -411,7 +478,6 @@ function ACTED:CreateWindow(config)
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             Visible = false,
             ZIndex = 2,
-            ClipsDescendants = false, -- Permite dropdownurilor sa apara corect
         })
         Create("UIListLayout",{Parent=Page, Padding=UDim.new(0,6), SortOrder=Enum.SortOrder.LayoutOrder})
         AddPadding(Page,4,4,2,6)
@@ -452,7 +518,6 @@ function ACTED:CreateWindow(config)
                 BackgroundColor3 = Theme.SurfaceAlt,
                 AutomaticSize = Enum.AutomaticSize.Y,
                 ZIndex = 2,
-                ClipsDescendants = false,
             })
             AddCorner(SFrame,10)
             AddStroke(SFrame, Theme.Border, 1, 0.3)
@@ -492,7 +557,6 @@ function ACTED:CreateWindow(config)
                     Size=UDim2.new(1,0,0,height),
                     BackgroundTransparency=1,
                     ZIndex=3,
-                    ClipsDescendants = false,
                 })
                 return row
             end
@@ -553,7 +617,7 @@ function ACTED:CreateWindow(config)
             -- =====================
             -- TOGGLE
             -- =====================
-            function Section:AddToggle(label, default, callback)
+            function Section:AddToggle(label, default, callback, flag)
                 callback = callback or function() end
                 local state = default or false
                 local row = MakeRow(34)
@@ -611,14 +675,20 @@ function ACTED:CreateWindow(config)
 
                 ToggleBtn.MouseButton1Click:Connect(function() SetState(not state) end)
 
-                local obj = {Value=state, Set=SetState}
+                local obj = {
+                    Value = state, 
+                    Set = SetState, 
+                    Get = function() return state end
+                }
+                
+                if flag then Window.Flags[flag] = obj end
                 return obj
             end
 
             -- =====================
             -- SLIDER
             -- =====================
-            function Section:AddSlider(label, min, max, default, callback)
+            function Section:AddSlider(label, min, max, default, callback, flag)
                 min = min or 0; max = max or 100
                 default = math.clamp(default or min, min, max)
                 callback = callback or function() end
@@ -710,17 +780,27 @@ function ACTED:CreateWindow(config)
                     end
                 end)
 
-                local obj={Value=value,Set=function(v)
-                    v=math.clamp(v,min,max)
-                    UpdateSlider(Track.AbsolutePosition.X+((v-min)/(max-min))*Track.AbsoluteSize.X)
-                end}
+                local obj={
+                    Value=value,
+                    Get = function() return value end,
+                    Set=function(v)
+                        v=math.clamp(v,min,max)
+                        value = v
+                        ValLabel.Text = tostring(v)
+                        local rel = (v-min)/(max-min)
+                        Tween(Fill,{Size=UDim2.new(rel,0,1,0)},0.05)
+                        Tween(Thumb,{Position=UDim2.new(rel,0-7,0.5,-7)},0.05)
+                        callback(value)
+                    end
+                }
+                if flag then Window.Flags[flag] = obj end
                 return obj
             end
 
             -- =====================
             -- TEXTBOX
             -- =====================
-            function Section:AddTextbox(label, placeholder, default, callback)
+            function Section:AddTextbox(label, placeholder, default, callback, flag)
                 callback = callback or function() end
                 local row = MakeRow(54)
 
@@ -767,13 +847,19 @@ function ACTED:CreateWindow(config)
                     if enter then callback(Box.Text) end
                 end)
 
-                return {Value=Box.Text, Get=function() return Box.Text end, Set=function(v) Box.Text=v end}
+                local obj = {
+                    Value=Box.Text, 
+                    Get=function() return Box.Text end, 
+                    Set=function(v) Box.Text=v; callback(v) end
+                }
+                if flag then Window.Flags[flag] = obj end
+                return obj
             end
 
             -- =====================
-            -- DROPDOWN (MODIFIED: DYNAMIC DIRECTION & SCOPE)
+            -- DROPDOWN (AUTO-FLIP FIXAT)
             -- =====================
-            function Section:AddDropdown(label, options, default, callback)
+            function Section:AddDropdown(label, options, default, callback, flag)
                 callback = callback or function() end
                 options = options or {}
                 local selected = default or options[1] or ""
@@ -801,13 +887,12 @@ function ACTED:CreateWindow(config)
                 AddCorner(DDBtn,7)
                 local ddStroke=AddStroke(DDBtn,Theme.Border,1)
 
-                -- Mutat direct in Main pentru a trece peste orice restrictie de clipping a elementelor parinte
                 local DDList = Create("Frame",{
-                    Parent=Main,
+                    Parent=ContentHolder,
                     Size=UDim2.new(0,DDBtn.AbsoluteSize.X,0,0),
                     BackgroundColor3=Theme.SurfaceAlt,
                     Visible=false,
-                    ZIndex=50,
+                    ZIndex=20,
                     ClipsDescendants=true,
                 })
                 AddCorner(DDList,8)
@@ -825,28 +910,25 @@ function ACTED:CreateWindow(config)
                 local function OpenDD()
                     open=true
                     local absPos = DDBtn.AbsolutePosition
-                    local mainPos = Main.AbsolutePosition
-                    local relPos = absPos - mainPos -- Gaseste locatia relativa in HUB
+                    local relPos = absPos - ContentHolder.AbsolutePosition
+                    local targetH = math.min(#options*30+8, 160)
                     
-                    local targetH = math.min(#options*30+8, 140)
+                    -- Calculează spațiul disponibil
+                    local spaceBelow = ContentHolder.AbsoluteSize.Y - (relPos.Y + DDBtn.AbsoluteSize.Y)
+                    local spaceAbove = relPos.Y
                     
-                    -- DINAMIC: Verifica daca este loc in partea de jos a hub-ului
-                    local spaceBelow = Main.AbsoluteSize.Y - (relPos.Y + DDBtn.AbsoluteSize.Y)
-                    
-                    if spaceBelow < targetH + 10 then
-                        -- Daca nu e loc jos, o trimite in SUS (ramane fixat lipit de buton in sus)
-                        DDList.Position = UDim2.new(0, relPos.X, 0, relPos.Y - targetH - 4)
-                        DDList.Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, 0)
-                        DDList.Visible = true
-                        Tween(DDList, {Size=UDim2.new(0, DDBtn.AbsoluteSize.X, 0, targetH)}, 0.2, Enum.EasingStyle.Quart)
+                    -- Dacă nu este loc jos dar este loc sus, deschide invers
+                    if spaceBelow < targetH and spaceAbove > spaceBelow then
+                        DDList.AnchorPoint = Vector2.new(0, 1)
+                        DDList.Position = UDim2.new(0, relPos.X, 0, relPos.Y - 4)
                     else
-                        -- Altfel, o trimite in JOS normal
+                        DDList.AnchorPoint = Vector2.new(0, 0)
                         DDList.Position = UDim2.new(0, relPos.X, 0, relPos.Y + DDBtn.AbsoluteSize.Y + 4)
-                        DDList.Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, 0)
-                        DDList.Visible = true
-                        Tween(DDList, {Size=UDim2.new(0, DDBtn.AbsoluteSize.X, 0, targetH)}, 0.2, Enum.EasingStyle.Quart)
                     end
-                    
+
+                    DDList.Size = UDim2.new(0,DDBtn.AbsoluteSize.X,0,0)
+                    DDList.Visible=true
+                    Tween(DDList,{Size=UDim2.new(0,DDBtn.AbsoluteSize.X,0,targetH)},0.2,Enum.EasingStyle.Back)
                     DDBtn.Text=selected.." ▴"
                 end
 
@@ -858,15 +940,11 @@ function ACTED:CreateWindow(config)
                         Text=opt,
                         TextColor3=(opt==selected) and Theme.Accent or Theme.TextPrimary,
                         Font=Enum.Font.Gotham,TextSize=12,
-                        AutoButtonColor=false,ZIndex=51,
+                        AutoButtonColor=false,ZIndex=21,
                     })
                     AddCorner(OptBtn,6)
-                    OptBtn.MouseEnter:Connect(function()
-                        Tween(OptBtn,{BackgroundColor3=Theme.SurfaceAlt},0.1)
-                    end)
-                    OptBtn.MouseLeave:Connect(function()
-                        Tween(OptBtn,{BackgroundColor3=Theme.Surface},0.1)
-                    end)
+                    OptBtn.MouseEnter:Connect(function() Tween(OptBtn,{BackgroundColor3=Theme.SurfaceAlt},0.1) end)
+                    OptBtn.MouseLeave:Connect(function() Tween(OptBtn,{BackgroundColor3=Theme.Surface},0.1) end)
                     OptBtn.MouseButton1Click:Connect(function()
                         selected=opt
                         DDBtn.Text=selected.." ▾"
@@ -880,31 +958,32 @@ function ACTED:CreateWindow(config)
                     end)
                 end
 
-                DDBtn.MouseButton1Click:Connect(function()
-                    if open then CloseDD() else OpenDD() end
-                end)
-                DDBtn.MouseEnter:Connect(function()
-                    Tween(ddStroke,{Color=Theme.Accent},0.15)
-                end)
-                DDBtn.MouseLeave:Connect(function()
-                    Tween(ddStroke,{Color=Theme.Border},0.15)
-                end)
+                DDBtn.MouseButton1Click:Connect(function() if open then CloseDD() else OpenDD() end end)
+                DDBtn.MouseEnter:Connect(function() Tween(ddStroke,{Color=Theme.Accent},0.15) end)
+                DDBtn.MouseLeave:Connect(function() Tween(ddStroke,{Color=Theme.Border},0.15) end)
 
-                return {
+                local obj = {
                     Value=selected,
+                    Get=function() return selected end,
                     Set=function(v)
                         selected=v
                         DDBtn.Text=v.." ▾"
+                        for _, c in ipairs(DDList:GetChildren()) do
+                            if c:IsA("TextButton") then
+                                c.TextColor3=(c.Text==selected) and Theme.Accent or Theme.TextPrimary
+                            end
+                        end
                         callback(v)
-                    end,
-                    Get=function() return selected end
+                    end
                 }
+                if flag then Window.Flags[flag] = obj end
+                return obj
             end
 
             -- =====================
             -- COLORPICKER
             -- =====================
-            function Section:AddColorPicker(label, default, callback)
+            function Section:AddColorPicker(label, default, callback, flag)
                 callback = callback or function() end
                 default = default or Color3.fromRGB(140,60,220)
                 local row = MakeRow(34)
@@ -917,11 +996,8 @@ function ACTED:CreateWindow(config)
                 })
 
                 local Swatch = Create("Frame",{
-                    Parent=row,
-                    Position=UDim2.new(1,-36,0.15,0),
-                    Size=UDim2.new(0,30,0.7,0),
-                    BackgroundColor3=default,
-                    ZIndex=4,
+                    Parent=row, Position=UDim2.new(1,-36,0.15,0),
+                    Size=UDim2.new(0,30,0.7,0), BackgroundColor3=default, ZIndex=4,
                 })
                 AddCorner(Swatch,6)
                 AddStroke(Swatch,Theme.Border,1)
@@ -930,10 +1006,8 @@ function ACTED:CreateWindow(config)
 
                 local CPOpen=false
                 local CPFrame = Create("Frame",{
-                    Parent=Main, -- Schimbat in Main
-                    Size=UDim2.new(0,160,0,0),
-                    BackgroundColor3=Theme.Surface,
-                    Visible=false,ZIndex=60,
+                    Parent=ContentHolder, Size=UDim2.new(0,160,0,0),
+                    BackgroundColor3=Theme.Surface, Visible=false,ZIndex=20,
                     ClipsDescendants=true,
                 })
                 AddCorner(CPFrame,10)
@@ -942,7 +1016,7 @@ function ACTED:CreateWindow(config)
                 local HueTrack=Create("Frame",{
                     Parent=CPFrame,Position=UDim2.new(0,8,0,10),
                     Size=UDim2.new(1,-16,0,14),
-                    BackgroundColor3=Color3.fromRGB(200,200,200),ZIndex=61,
+                    BackgroundColor3=Color3.fromRGB(200,200,200),ZIndex=21,
                 })
                 AddCorner(HueTrack,999)
                 Create("UIGradient",{Parent=HueTrack,
@@ -959,16 +1033,9 @@ function ACTED:CreateWindow(config)
                 local HueThumb=Create("Frame",{
                     Parent=HueTrack,Size=UDim2.new(0,10,0,18),
                     Position=UDim2.new(hue,0-5,0.5,-9),
-                    BackgroundColor3=Color3.fromRGB(255,255,255),ZIndex=62,
+                    BackgroundColor3=Color3.fromRGB(255,255,255),ZIndex=22,
                 })
                 AddCorner(HueThumb,999)
-
-                local BrtTrack=Create("Frame",{
-                    Parent=CPFrame,Position=UDim2.new(0,8,0,34),
-                    Size=UDim2.new(1,-16,0,14),
-                    BackgroundColor3=Color3.fromRGB(200,200,200),ZIndex=61,
-                })
-                AddCorner(BrtTrack,999)
 
                 local function UpdateGradients()
                     local col=Color3.fromHSV(hue,sat,val)
@@ -977,9 +1044,9 @@ function ACTED:CreateWindow(config)
                     callback(col)
                 end
 
-                local hSliding,bSliding=false,false
+                local hSliding=false
                 local HueDrag=Create("TextButton",{Parent=HueTrack,Size=UDim2.new(1,0,0,24),
-                    Position=UDim2.new(0,0,0.5,-12),BackgroundTransparency=1,Text="",ZIndex=63})
+                    Position=UDim2.new(0,0,0.5,-12),BackgroundTransparency=1,Text="",ZIndex=23})
                 HueDrag.MouseButton1Down:Connect(function() hSliding=true end)
                 UserInputService.InputChanged:Connect(function(inp)
                     if hSliding and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
@@ -994,15 +1061,25 @@ function ACTED:CreateWindow(config)
                 local SwatchBtn=Create("TextButton",{Parent=row,Size=UDim2.new(0,34,1,0),Position=UDim2.new(1,-36,0,0),BackgroundTransparency=1,Text="",ZIndex=5})
                 SwatchBtn.MouseButton1Click:Connect(function()
                     CPOpen=not CPOpen
-                    local absPos=Swatch.AbsolutePosition-Main.AbsolutePosition
+                    local absPos=Swatch.AbsolutePosition-ContentHolder.AbsolutePosition
                     CPFrame.Position=UDim2.new(0,absPos.X-120,0,absPos.Y+26)
                     CPFrame.Visible=true
-                    Tween(CPFrame,{Size=UDim2.new(0,160,0,CPOpen and 56 or 0)},0.2,Enum.EasingStyle.Back)
+                    Tween(CPFrame,{Size=UDim2.new(0,160,0,CPOpen and 36 or 0)},0.2,Enum.EasingStyle.Back)
                     if not CPOpen then task.delay(0.22,function() CPFrame.Visible=false end) end
                 end)
 
                 UpdateGradients()
-                return {Get=function() return Color3.fromHSV(hue,sat,val) end}
+                
+                local obj = {
+                    Value=default,
+                    Get=function() return Color3.fromHSV(hue,sat,val) end,
+                    Set=function(v)
+                        hue,sat,val = Color3.toHSV(v)
+                        UpdateGradients()
+                    end
+                }
+                if flag then Window.Flags[flag] = obj end
+                return obj
             end
 
             -- =====================
@@ -1023,7 +1100,7 @@ function ACTED:CreateWindow(config)
             -- =====================
             -- KEYBIND
             -- =====================
-            function Section:AddKeybind(label, default, callback)
+            function Section:AddKeybind(label, default, callback, flag)
                 callback = callback or function() end
                 default  = default  or Enum.KeyCode.RightShift
                 local key = default
@@ -1058,12 +1135,25 @@ function ACTED:CreateWindow(config)
                         KBtn.Text="["..tostring(key.Name).."]"
                         KBtn.TextColor3=Theme.Accent
                         listening=false
+                        callback(key)
                     end
                     if not listening and inp.UserInputType==Enum.UserInputType.Keyboard and inp.KeyCode==key then
                         callback(key)
                     end
                 end)
-                return {Get=function() return key end}
+                
+                local obj = {
+                    Value=key,
+                    Get=function() return key end,
+                    Set=function(v)
+                        key=v
+                        KBtn.Text="["..tostring(key.Name).."]"
+                        KBtn.TextColor3=Theme.Accent
+                        callback(key)
+                    end
+                }
+                if flag then Window.Flags[flag] = obj end
+                return obj
             end
 
             -- =====================
@@ -1085,7 +1175,6 @@ function ACTED:CreateWindow(config)
         return tabData
     end
 
-    -- Notification system
     function Window:Notify(title, message, ntype, duration)
         ntype    = ntype    or "info"
         duration = duration or 3
@@ -1096,7 +1185,7 @@ function ACTED:CreateWindow(config)
             warning = Theme.Warning,
             error   = Theme.Danger,
         }
-        local icons = {info="ℹ", success="✓", warning="⚠", error="❌"}
+        local icons = {info="ℹ", success="✓", warning="", error=""}
         local col = colors[ntype] or Theme.Accent
 
         local NHolder = ScreenGui:FindFirstChild("NotifHolder") or Create("Frame",{
@@ -1160,46 +1249,6 @@ function ACTED:CreateWindow(config)
             Tween(NFrame,{BackgroundTransparency=1,Size=UDim2.new(1,0,0,0)},0.3)
             task.delay(0.35,function() NFrame:Destroy() end)
         end)
-    end
-
-    -- ============================================================
-    -- CONFIG SAVER FUNCTION (Folder NumeHub -> configs -> nume.json)
-    -- ============================================================
-    function Window:SaveConfig(configName, data)
-        if not configName or configName == "" then configName = "default" end
-        data = data or {}
-        
-        -- Scoatem caracterele invalide din titlu pentru foldere Windows
-        local folderName = Title:gsub('[%c%p%s]', '') 
-        if folderName == "" then folderName = "ACTED_Configs" end
-        
-        local success, err = pcall(function()
-            if makefolder and writefile then
-                -- Pasul 1: Cream folderul principal numit dupa Hub
-                if not isfolder(folderName) then
-                    makefolder(folderName)
-                end
-                
-                -- Pasul 2: Cream folderul interior numit 'configs'
-                local configsPath = folderName .. "/configs"
-                if not isfolder(configsPath) then
-                    makefolder(configsPath)
-                end
-                
-                -- Pasul 3: Salvam configuratia in format JSON
-                local json = HttpService:JSONEncode(data)
-                local filePath = configsPath .. "/" .. configName .. ".json"
-                writefile(filePath, json)
-                
-                Window:Notify("Sistem Config", "Configuratia '"..configName.."' a fost salvata!", "success", 3)
-            else
-                Window:Notify("Sistem Config", "Executorul tau nu suporta salvarea de fisiere local.", "error", 4)
-            end
-        end)
-        
-        if not success then
-            Window:Notify("Sistem Config", "Eroare la salvare: " .. tostring(err), "error", 4)
-        end
     end
 
     task.delay(0.6, function()
