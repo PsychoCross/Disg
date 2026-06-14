@@ -15,7 +15,6 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
-local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -148,14 +147,19 @@ end
 -- ============================================================
 local LOGO_SVG = [[
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Wings left -->
   <path d="M2 34 Q10 20 20 28 Q14 34 10 38 Z" fill="#8c3ddc" opacity="0.85"/>
   <path d="M2 34 Q8 38 12 44 Q8 40 5 42 Z" fill="#6a2aaa" opacity="0.7"/>
+  <!-- Wings right -->
   <path d="M62 34 Q54 20 44 28 Q50 34 54 38 Z" fill="#8c3ddc" opacity="0.85"/>
   <path d="M62 34 Q56 38 52 44 Q56 40 59 42 Z" fill="#6a2aaa" opacity="0.7"/>
+  <!-- Inverted Cross -->
   <rect x="29" y="18" width="6" height="28" rx="1" fill="#c87eff"/>
   <rect x="22" y="32" width="20" height="6" rx="1" fill="#c87eff"/>
+  <!-- Fedora brim -->
   <ellipse cx="32" cy="20" rx="14" ry="4" fill="#1a1228"/>
   <rect x="22" y="11" width="20" height="10" rx="5" fill="#1a1228"/>
+  <!-- Jacket collar hints -->
   <path d="M24 48 L32 44 L40 48 L38 58 L32 55 L26 58 Z" fill="#120d1e" stroke="#6a2aaa" stroke-width="1"/>
   <path d="M32 44 L32 55" stroke="#8c3ddc" stroke-width="1"/>
 </svg>
@@ -418,11 +422,10 @@ function ACTED:CreateWindow(config)
 
     MakeDraggable(Main, TopBar)
 
-    -- Window object & Config Table
+    -- Window object
     local Window = {}
     Window._tabs = {}
     Window._activeTab = nil
-    Window.Flags = {} -- Added to support the Config system
 
     -- =====================
     -- CreateTab
@@ -603,7 +606,7 @@ function ACTED:CreateWindow(config)
             -- =====================
             -- TOGGLE
             -- =====================
-            function Section:AddToggle(label, default, callback, flag)
+            function Section:AddToggle(label, default, callback)
                 callback = callback or function() end
                 local state = default or false
                 local row = MakeRow(34)
@@ -661,15 +664,14 @@ function ACTED:CreateWindow(config)
 
                 ToggleBtn.MouseButton1Click:Connect(function() SetState(not state) end)
 
-                local obj = {Value=state, Set=SetState, Get=function() return state end}
-                if flag then Window.Flags[flag] = obj end
+                local obj = {Value=state, Set=SetState}
                 return obj
             end
 
             -- =====================
             -- SLIDER
             -- =====================
-            function Section:AddSlider(label, min, max, default, callback, flag)
+            function Section:AddSlider(label, min, max, default, callback)
                 min = min or 0; max = max or 100
                 default = math.clamp(default or min, min, max)
                 callback = callback or function() end
@@ -761,18 +763,17 @@ function ACTED:CreateWindow(config)
                     end
                 end)
 
-                local obj={Value=value, Get=function() return value end, Set=function(v)
+                local obj={Value=value,Set=function(v)
                     v=math.clamp(v,min,max)
                     UpdateSlider(Track.AbsolutePosition.X+((v-min)/(max-min))*Track.AbsoluteSize.X)
                 end}
-                if flag then Window.Flags[flag] = obj end
                 return obj
             end
 
             -- =====================
             -- TEXTBOX
             -- =====================
-            function Section:AddTextbox(label, placeholder, default, callback, flag)
+            function Section:AddTextbox(label, placeholder, default, callback)
                 callback = callback or function() end
                 local row = MakeRow(54)
 
@@ -819,15 +820,13 @@ function ACTED:CreateWindow(config)
                     if enter then callback(Box.Text) end
                 end)
 
-                local obj = {Value=Box.Text, Get=function() return Box.Text end, Set=function(v) Box.Text=v; callback(v) end}
-                if flag then Window.Flags[flag] = obj end
-                return obj
+                return {Value=Box.Text, Get=function() return Box.Text end, Set=function(v) Box.Text=v end}
             end
 
             -- =====================
-            -- DROPDOWN (Cu suport pentru sus/jos automat)
+            -- DROPDOWN
             -- =====================
-            function Section:AddDropdown(label, options, default, callback, flag)
+            function Section:AddDropdown(label, options, default, callback)
                 callback = callback or function() end
                 options = options or {}
                 local selected = default or options[1] or ""
@@ -873,64 +872,40 @@ function ACTED:CreateWindow(config)
                     open=false
                     Tween(DDList,{Size=UDim2.new(0,DDBtn.AbsoluteSize.X,0,0)},0.2,Enum.EasingStyle.Quart)
                     DDBtn.Text=selected.." ▾"
-                    task.delay(0.22,function() DDList.Visible=false end)
+                    task.delay(0.22,function() 
+                        DDList.Visible=false 
+                        DDList.AnchorPoint = Vector2.new(0, 0) -- Resetăm ancora
+                    end)
                 end
 
                 local function OpenDD()
-                    open=true
+                    open = true
+                    local targetH = math.min(#options * 30 + 8, 160)
                     local absPos = DDBtn.AbsolutePosition
                     local relPos = absPos - ContentHolder.AbsolutePosition
-                    local targetH = math.min(#options*30+8, 160)
                     
-                    DDList.Size = UDim2.new(0,DDBtn.AbsoluteSize.X,0,0)
-                    DDList.Visible=true
-                    
-                    -- Calculează spațiul disponibil sub buton
+                    -- Calculăm cât spațiu este sub buton în ContentHolder
                     local spaceBelow = ContentHolder.AbsoluteSize.Y - (relPos.Y + DDBtn.AbsoluteSize.Y)
-                    
-                    if spaceBelow < targetH and relPos.Y > targetH then
-                        -- Deschidere în SUS (Ancorăm de punctul de jos)
+
+                    DDList.Visible = true
+
+                    if spaceBelow < targetH then
+                        -- Nu are loc în jos -> Deschidem în SUS
                         DDList.AnchorPoint = Vector2.new(0, 1)
                         DDList.Position = UDim2.new(0, relPos.X, 0, relPos.Y - 4)
+                        DDList.Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, 0)
+                        Tween(DDList, {Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, targetH)}, 0.2, Enum.EasingStyle.Back)
                     else
-                        -- Deschidere în JOS (Ancorăm de punctul de sus)
+                        -- Are loc -> Deschidem în JOS (comportament normal)
                         DDList.AnchorPoint = Vector2.new(0, 0)
                         DDList.Position = UDim2.new(0, relPos.X, 0, relPos.Y + DDBtn.AbsoluteSize.Y + 4)
+                        DDList.Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, 0)
+                        Tween(DDList, {Size = UDim2.new(0, DDBtn.AbsoluteSize.X, 0, targetH)}, 0.2, Enum.EasingStyle.Back)
                     end
                     
-                    Tween(DDList,{Size=UDim2.new(0,DDBtn.AbsoluteSize.X,0,targetH)},0.2,Enum.EasingStyle.Back)
-                    DDBtn.Text=selected.." ▴"
+                    DDBtn.Text = selected .. " ▴"
                 end
 
-                for _, opt in ipairs(options) do
-                    local OptBtn = Create("TextButton",{
-                        Parent=DDList,
-                        Size=UDim2.new(1,0,0,26),
-                        BackgroundColor3=Theme.Surface,
-                        Text=opt,
-                        TextColor3=(opt==selected) and Theme.Accent or Theme.TextPrimary,
-                        Font=Enum.Font.Gotham,TextSize=12,
-                        AutoButtonColor=false,ZIndex=21,
-                    })
-                    AddCorner(OptBtn,6)
-                    OptBtn.MouseEnter:Connect(function()
-                        Tween(OptBtn,{BackgroundColor3=Theme.SurfaceAlt},0.1)
-                    end)
-                    OptBtn.MouseLeave:Connect(function()
-                        Tween(OptBtn,{BackgroundColor3=Theme.Surface},0.1)
-                    end)
-                    OptBtn.MouseButton1Click:Connect(function()
-                        selected=opt
-                        DDBtn.Text=selected.." ▾"
-                        for _, c in ipairs(DDList:GetChildren()) do
-                            if c:IsA("TextButton") then
-                                c.TextColor3=(c.Text==selected) and Theme.Accent or Theme.TextPrimary
-                            end
-                        end
-                        CloseDD()
-                        callback(selected)
-                    end)
-                end
 
                 DDBtn.MouseButton1Click:Connect(function()
                     if open then CloseDD() else OpenDD() end
@@ -942,7 +917,7 @@ function ACTED:CreateWindow(config)
                     Tween(ddStroke,{Color=Theme.Border},0.15)
                 end)
 
-                local obj = {
+                return {
                     Value=selected,
                     Set=function(v)
                         selected=v
@@ -951,14 +926,12 @@ function ACTED:CreateWindow(config)
                     end,
                     Get=function() return selected end
                 }
-                if flag then Window.Flags[flag] = obj end
-                return obj
             end
 
             -- =====================
             -- COLORPICKER (simple)
             -- =====================
-            function Section:AddColorPicker(label, default, callback, flag)
+            function Section:AddColorPicker(label, default, callback)
                 callback = callback or function() end
                 default = default or Color3.fromRGB(140,60,220)
                 local row = MakeRow(34)
@@ -1058,17 +1031,7 @@ function ACTED:CreateWindow(config)
                 end)
 
                 UpdateGradients()
-                
-                local obj = {
-                    Get=function() return Color3.fromHSV(hue,sat,val) end,
-                    Set=function(v)
-                        default=v
-                        hue,sat,val = Color3.toHSV(v)
-                        UpdateGradients()
-                    end
-                }
-                if flag then Window.Flags[flag] = obj end
-                return obj
+                return {Get=function() return Color3.fromHSV(hue,sat,val) end}
             end
 
             -- =====================
@@ -1089,7 +1052,7 @@ function ACTED:CreateWindow(config)
             -- =====================
             -- KEYBIND
             -- =====================
-            function Section:AddKeybind(label, default, callback, flag)
+            function Section:AddKeybind(label, default, callback)
                 callback = callback or function() end
                 default  = default  or Enum.KeyCode.RightShift
                 local key = default
@@ -1129,17 +1092,7 @@ function ACTED:CreateWindow(config)
                         callback(key)
                     end
                 end)
-                
-                local obj = {
-                    Get=function() return key.Name end,
-                    Set=function(v)
-                        key = Enum.KeyCode[v] or key
-                        KBtn.Text="["..tostring(key.Name).."]"
-                        callback(key)
-                    end
-                }
-                if flag then Window.Flags[flag] = obj end
-                return obj
+                return {Get=function() return key end}
             end
 
             -- =====================
@@ -1160,59 +1113,6 @@ function ACTED:CreateWindow(config)
 
         return tabData
     end -- CreateTab
-
-    -- =====================
-    -- CONFIG SYSTEM (Save/Load)
-    -- =====================
-    function Window:SaveConfig(configName)
-        local folderName = "ACTED"
-        if not isfolder(folderName) then makefolder(folderName) end
-        if not isfolder(folderName .. "/configs") then makefolder(folderName .. "/configs") end
-
-        local data = {}
-        for flag, obj in pairs(Window.Flags) do
-            local val = obj:Get()
-            if typeof(val) == "Color3" then
-                data[flag] = {r = val.R, g = val.G, b = val.B}
-            else
-                data[flag] = val
-            end
-        end
-
-        local success, encoded = pcall(function() return HttpService:JSONEncode(data) end)
-        if success then
-            writefile(folderName .. "/configs/" .. configName .. ".json", encoded)
-            Window:Notify("Config", "Config '" .. configName .. "' saved successfully!", "success", 3)
-        else
-            Window:Notify("Config", "Failed to encode config!", "error", 3)
-        end
-    end
-
-    function Window:LoadConfig(configName)
-        local path = "ACTED/configs/" .. configName .. ".json"
-        if isfile(path) then
-            local success, content = pcall(function() return readfile(path) end)
-            if success then
-                local s2, decoded = pcall(function() return HttpService:JSONDecode(content) end)
-                if s2 then
-                    for flag, val in pairs(decoded) do
-                        if Window.Flags[flag] and Window.Flags[flag].Set then
-                            if type(val) == "table" and val.r and val.g and val.b then
-                                Window.Flags[flag].Set(Color3.new(val.r, val.g, val.b))
-                            else
-                                Window.Flags[flag].Set(val)
-                            end
-                        end
-                    end
-                    Window:Notify("Config", "Config '" .. configName .. "' loaded successfully!", "success", 3)
-                else
-                    Window:Notify("Config", "Failed to parse config!", "error", 3)
-                end
-            end
-        else
-            Window:Notify("Config", "Config '" .. configName .. "' not found!", "error", 3)
-        end
-    end
 
     -- Notification system
     function Window:Notify(title, message, ntype, duration)
@@ -1293,7 +1193,63 @@ function ACTED:CreateWindow(config)
         end)
     end
 
-    -- Initial notification
+
+
+
+    -- =====================
+    -- CONFIG SYSTEM
+    -- =====================
+    local HttpService = game:GetService("HttpService")
+    -- Folosim numele Hub-ului pt folder. Curățăm caracterele invalide din nume dacă e nevoie.
+    local safeHubName = tostring(Title):gsub("[%c%p%s]", "_")
+    local hubFolder = safeHubName
+    local configFolder = hubFolder .. "/configs"
+
+    function Window:SaveConfig(configName, settingsTable)
+        if not isfolder then 
+            return self:Notify("System", "Executorul tau nu suporta file system!", "error") 
+        end
+
+        -- Creăm folderele dacă nu există
+        if not isfolder(hubFolder) then makefolder(hubFolder) end
+        if not isfolder(configFolder) then makefolder(configFolder) end
+
+        local path = configFolder .. "/" .. configName .. ".json"
+        local success, err = pcall(function()
+            writefile(path, HttpService:JSONEncode(settingsTable))
+        end)
+
+        if success then
+            self:Notify("Config", "Salvat in " .. hubFolder .. "/configs/", "success")
+        else
+            self:Notify("Error", "Eroare la salvare: " .. tostring(err), "error")
+        end
+    end
+
+    function Window:LoadConfig(configName)
+        if not isfile then return nil end
+        
+        local path = configFolder .. "/" .. configName .. ".json"
+        if isfile(path) then
+            local success, data = pcall(function()
+                return HttpService:JSONDecode(readfile(path))
+            end)
+            
+            if success then
+                self:Notify("Config", "Setarile au fost incarcate!", "success")
+                return data
+            else
+                self:Notify("Error", "Fisierul config este corupt!", "error")
+            end
+        else
+            self:Notify("Error", "Config-ul nu a fost gasit!", "warning")
+        end
+        return nil
+    end
+
+
+
+    -- Initial notification (MODIFICAT: Nume "ACTED" și mesajul "Was loaded successfully.")
     task.delay(0.6, function()
         Window:Notify("ACTED", "Was loaded successfully.", "success", 3)
     end)
