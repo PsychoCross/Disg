@@ -4,7 +4,8 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.4 | Fixes: Slider float, Dropdown overlay/click-through, Config refresh, Multi-slot Config Manager
+-- Version: 2.5 | Fixes: Slider float, Dropdown overlay/click-through, Config refresh, Multi-slot Config Manager
+-- New in 2.5: Auto Load Config toggle (per-slot), startup auto-load + dropdown pre-select, premium animated notifications
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -182,12 +183,37 @@ local function RemoveSlotFromList(slotName)
 end
 
 -- ============================================================
+-- Auto Load config helpers
+-- Stored as ACTED_autoload.json -> {enabled = bool, slot = "name"}
+-- ============================================================
+local AUTOLOAD_FILE = "ACTED_autoload.json"
+
+local function ReadAutoLoad()
+    local ok, raw = pcall(readfile, AUTOLOAD_FILE)
+    if not ok or not raw then return {enabled = false, slot = nil} end
+    local ok2, data = pcall(function()
+        return game:GetService("HttpService"):JSONDecode(raw)
+    end)
+    if ok2 and type(data) == "table" then
+        return {enabled = data.enabled == true, slot = data.slot}
+    end
+    return {enabled = false, slot = nil}
+end
+
+local function WriteAutoLoad(enabled, slot)
+    local ok, json = pcall(function()
+        return game:GetService("HttpService"):JSONEncode({enabled = enabled, slot = slot})
+    end)
+    if ok then pcall(writefile, AUTOLOAD_FILE, json) end
+end
+
+-- ============================================================
 -- MAIN LIBRARY
 -- ============================================================
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.4 | occult"
+    local SubTitle = config.SubTitle or "v2.5 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
     local _configData = {}
@@ -478,6 +504,16 @@ function ACTED:CreateWindow(config)
         local slotList = ReadSlotList()
         local selectedSlot = nil
         local slotDropdown = nil
+        local autoLoadToggle = nil
+
+        local autoLoadData = ReadAutoLoad()
+
+        -- Pre-select the auto-load slot (if any) so the dropdown opens on it
+        if autoLoadData.enabled and autoLoadData.slot then
+            for _, v in ipairs(slotList) do
+                if v == autoLoadData.slot then selectedSlot = v; break end
+            end
+        end
 
         -- We build the dropdown first (populated from file)
         local function RefreshDropdown()
@@ -497,8 +533,36 @@ function ACTED:CreateWindow(config)
         slotDropdown = section:AddDropdown(
             "Select slot",
             slotList,
-            nil,  -- no pre-selection
-            function(v) selectedSlot = v end
+            selectedSlot,  -- pre-select auto-load slot if it exists
+            function(v)
+                selectedSlot = v
+                -- If Auto Load is currently ON, switching slot retargets it
+                if autoLoadToggle and autoLoadToggle.Get() then
+                    WriteAutoLoad(true, selectedSlot)
+                    Window:Notify("Auto Load", "Now auto-loading: " .. tostring(selectedSlot), "info", 3)
+                end
+            end
+        )
+
+        -- ---- Auto Load toggle ----
+        autoLoadToggle = section:AddToggle(
+            "Auto Load Config",
+            autoLoadData.enabled,
+            function(state)
+                if state then
+                    if not selectedSlot or selectedSlot == "" then
+                        Window:Notify("Auto Load", "Select a slot first.", "warning", 3)
+                        autoLoadToggle.Set(false)
+                        WriteAutoLoad(false, nil)
+                        return
+                    end
+                    WriteAutoLoad(true, selectedSlot)
+                    Window:Notify("Auto Load", "Enabled for: " .. tostring(selectedSlot), "success", 3)
+                else
+                    WriteAutoLoad(false, nil)
+                    Window:Notify("Auto Load", "Auto load disabled.", "info", 3)
+                end
+            end
         )
 
         -- ---- Action buttons ----
@@ -532,6 +596,12 @@ function ACTED:CreateWindow(config)
                 return
             end
             Window:DeleteConfig(name)
+            -- If the deleted slot was the auto-load target, clear auto-load
+            local al = ReadAutoLoad()
+            if al.enabled and al.slot == name then
+                WriteAutoLoad(false, nil)
+                if autoLoadToggle then autoLoadToggle.Set(false) end
+            end
             selectedSlot = nil
             RefreshDropdown()
         end)
@@ -542,6 +612,27 @@ function ACTED:CreateWindow(config)
         end)
 
         section:AddDivider()
+
+        -- ---- Apply Auto Load on startup (after everything is built) ----
+        if autoLoadData.enabled and autoLoadData.slot then
+            local targetSlot = autoLoadData.slot
+            -- Verify the slot still exists before loading
+            local exists = false
+            for _, v in ipairs(ReadSlotList()) do
+                if v == targetSlot then exists = true; break end
+            end
+            if exists then
+                task.delay(0.8, function()
+                    Window:LoadConfig(targetSlot)
+                    -- Keep dropdown + selection in sync after load applies values
+                    selectedSlot = targetSlot
+                    slotDropdown.SetOptions(ReadSlotList(), targetSlot)
+                end)
+            else
+                WriteAutoLoad(false, nil)
+                if autoLoadToggle then autoLoadToggle.Set(false) end
+            end
+        end
     end
 
     -- ============================================================
@@ -1285,50 +1376,122 @@ function ACTED:CreateWindow(config)
         ntype    = ntype    or "info"
         duration = duration or 3
         local colors = {info = Theme.Accent, success = Theme.Success, warning = Theme.Warning, error = Theme.Danger}
-        local col = colors[ntype] or Theme.Accent
+        local icons  = {info = "ℹ", success = "✓", warning = "!", error = "✕"}
+        local col  = colors[ntype] or Theme.Accent
+        local icon = icons[ntype]  or "ℹ"
 
         local NHolder = ScreenGui:FindFirstChild("NotifHolder") or Create("Frame", {
             Name = "NotifHolder", Parent = ScreenGui,
-            Position = UDim2.new(1, -270, 1, -300),
-            Size = UDim2.new(0, 250, 0, 280),
+            Position = UDim2.new(1, -290, 1, -320),
+            Size = UDim2.new(0, 270, 0, 300),
             BackgroundTransparency = 1,
+            ZIndex = 200,
         })
         if not NHolder.Parent then NHolder.Parent = ScreenGui end
         local _ = NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLayout", {
             Parent = NHolder, VerticalAlignment = Enum.VerticalAlignment.Bottom,
-            SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6),
+            SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8),
+        })
+
+        -- Outer wrapper controls slide/fade animation; inner frame controls height reveal.
+        local NWrap = Create("Frame", {
+            Parent = NHolder, Size = UDim2.new(1, 0, 0, 64),
+            Position = UDim2.new(1.4, 0, 0, 0),  -- start off-screen to the right
+            BackgroundTransparency = 1, ZIndex = 200,
         })
 
         local NFrame = Create("Frame", {
-            Parent = NHolder, Size = UDim2.new(1, 0, 0, 0),
+            Parent = NWrap, Size = UDim2.new(1, 0, 1, 0),
             BackgroundColor3 = Theme.Surface,
-            ClipsDescendants = true, ZIndex = 99,
+            BackgroundTransparency = 0.06,
+            ClipsDescendants = true, ZIndex = 200,
         })
-        AddCorner(NFrame, 10)
-        AddStroke(NFrame, col, 1.5)
-        local accent = Create("Frame", {Parent = NFrame, Size = UDim2.new(0, 3, 1, 0), BackgroundColor3 = col, ZIndex = 100})
-        Create("UICorner", {Parent = accent, CornerRadius = UDim.new(0, 3)})
+        AddCorner(NFrame, 12)
+        local nStroke = AddStroke(NFrame, col, 1.4, 0.2)
+
+        -- Subtle glass gradient overlay
+        Create("UIGradient", {
+            Parent = NFrame,
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+                ColorSequenceKeypoint.new(1, Theme.Surface),
+            }),
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.94),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Rotation = 90,
+        })
+
+        -- Left accent bar with glow
+        local accent = Create("Frame", {
+            Parent = NFrame, Size = UDim2.new(0, 4, 1, 0),
+            BackgroundColor3 = col, ZIndex = 202, BorderSizePixel = 0,
+        })
+        Create("UICorner", {Parent = accent, CornerRadius = UDim.new(0, 4)})
+
+        -- Icon badge
+        local iconHolder = Create("Frame", {
+            Parent = NFrame, Position = UDim2.new(0, 12, 0, 12),
+            Size = UDim2.new(0, 28, 0, 28),
+            BackgroundColor3 = col, BackgroundTransparency = 0.82,
+            ZIndex = 201,
+        })
+        AddCorner(iconHolder, 8)
+        AddStroke(iconHolder, col, 1, 0.4)
         Create("TextLabel", {
-            Parent = NFrame, Position = UDim2.new(0, 14, 0, 6), Size = UDim2.new(1, -20, 0, 18),
+            Parent = iconHolder, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1, Text = icon,
+            TextColor3 = col, Font = Enum.Font.GothamBold, TextSize = 15,
+            ZIndex = 202,
+        })
+
+        Create("TextLabel", {
+            Parent = NFrame, Position = UDim2.new(0, 50, 0, 10), Size = UDim2.new(1, -62, 0, 18),
             BackgroundTransparency = 1, Text = title,
-            TextColor3 = col, Font = Enum.Font.GothamBold, TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 100,
+            TextColor3 = Theme.TextPrimary, Font = Enum.Font.GothamBold, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 201,
         })
         Create("TextLabel", {
-            Parent = NFrame, Position = UDim2.new(0, 14, 0, 24), Size = UDim2.new(1, -20, 0, 30),
+            Parent = NFrame, Position = UDim2.new(0, 50, 0, 28), Size = UDim2.new(1, -62, 0, 32),
             BackgroundTransparency = 1, Text = message,
             TextColor3 = Theme.TextSecondary, Font = Enum.Font.Gotham, TextSize = 11,
-            TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 100,
+            TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 201,
+        })
+
+        -- Progress bar (countdown)
+        local ProgTrack = Create("Frame", {
+            Parent = NFrame, Position = UDim2.new(0, 0, 1, -3),
+            Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = Theme.SurfaceAlt,
+            BackgroundTransparency = 0.3, ZIndex = 202, BorderSizePixel = 0,
         })
         local Prog = Create("Frame", {
-            Parent = NFrame, Position = UDim2.new(0, 0, 1, -2),
-            Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = col, ZIndex = 101,
+            Parent = ProgTrack, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = col, ZIndex = 203, BorderSizePixel = 0,
         })
-        Tween(NFrame, {Size = UDim2.new(1, 0, 0, 60)}, 0.3, Enum.EasingStyle.Back)
-        Tween(Prog, {Size = UDim2.new(0, 0, 0, 2)}, duration, Enum.EasingStyle.Linear)
+
+        -- Entrance: slide in + soft glow pulse on the stroke
+        Tween(NWrap, {Position = UDim2.new(0, 0, 0, 0)}, 0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        Tween(nStroke, {Transparency = 0}, 0.5, Enum.EasingStyle.Sine)
+        task.delay(0.5, function()
+            if nStroke and nStroke.Parent then
+                Tween(nStroke, {Color = col:Lerp(Color3.new(1,1,1), 0.25)}, 0.25, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                task.delay(0.25, function()
+                    if nStroke and nStroke.Parent then
+                        Tween(nStroke, {Color = col}, 0.35, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
+                    end
+                end)
+            end
+        end)
+
+        -- Countdown progress shrink
+        Tween(Prog, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
+
+        -- Exit: slide out + fade
         task.delay(duration, function()
-            Tween(NFrame, {BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 0)}, 0.3)
-            task.delay(0.35, function() NFrame:Destroy() end)
+            Tween(NWrap, {Position = UDim2.new(1.4, 0, 0, 0)}, 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+            Tween(NFrame, {BackgroundTransparency = 1}, 0.3)
+            task.delay(0.4, function() NWrap:Destroy() end)
         end)
     end
 
@@ -1343,6 +1506,35 @@ return ACTED
 
 --[[
 ========================================
+CHANGELOG v2.5
+========================================
+
+NEW: AUTO LOAD CONFIG TOGGLE
+  AddConfigManager now includes an "Auto Load Config" toggle.
+  - Turning it ON for the currently selected slot writes
+    ACTED_autoload.json = {enabled=true, slot="<name>"}.
+  - Turning it OFF clears the file (enabled=false).
+  - Switching the slot dropdown while Auto Load is ON retargets
+    auto-load to the newly selected slot automatically.
+  - Deleting the auto-load slot disables auto-load and resets the toggle.
+
+NEW: STARTUP AUTO LOAD + DROPDOWN PRE-SELECT
+  On script execution, if ACTED_autoload.json has enabled=true and a
+  valid slot, the GUI:
+    - Pre-selects that slot in the "Select slot" dropdown immediately
+      (no waiting / no manual click needed).
+    - Calls Window:LoadConfig(slot) shortly after the GUI builds to
+      apply all saved values (toggles, sliders, dropdowns, keybinds, etc).
+  If the saved slot no longer exists, auto-load is safely disabled.
+
+NEW: PREMIUM ANIMATED NOTIFICATIONS
+  Window:Notify rebuilt with:
+    - Slide-in from the right with a Back-easing entrance
+    - Glassy gradient overlay + colored glow stroke that pulses once on arrival
+    - Icon badge per type (info / success / warning / error)
+    - Smooth countdown progress bar
+    - Slide-out + fade exit animation
+
 CHANGELOG v2.4
 ========================================
 
