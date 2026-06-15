@@ -4,7 +4,7 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.6.1 | Fixes: New Settings Folder, "Profiles" instead of "Slots", Beautiful Notify
+-- Version: 2.7 | Fixes: Folders Split, Terminology Change, Animated Pro Notifications
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -135,13 +135,13 @@ end
 local _openDropdown = nil
 
 -- ============================================================
--- Config profile management & Folder System
+-- Config settings management & Folder System
 -- ============================================================
 local HUB_FOLDER      = "ACTED"
 local CONFIG_FOLDER   = HUB_FOLDER .. "/configs"
 local SETTINGS_FOLDER = HUB_FOLDER .. "/settings"
 local CONFIG_PREFIX   = "ACTED_config_"
-local PROFILES_FILE   = SETTINGS_FOLDER .. "/ACTED_profiles.json"
+local SETTINGS_FILE   = SETTINGS_FOLDER .. "/ACTED_settings.json"
 local AUTOLOAD_FILE   = SETTINGS_FOLDER .. "/ACTED_autoload.json"
 
 local function EnsureFolders()
@@ -152,13 +152,13 @@ local function EnsureFolders()
     end)
 end
 
-local function ProfileFileName(profileName)
-    return CONFIG_FOLDER .. "/" .. CONFIG_PREFIX .. profileName .. ".json"
+local function SettingFileName(settingName)
+    return CONFIG_FOLDER .. "/" .. CONFIG_PREFIX .. settingName .. ".json"
 end
 
-local function ReadProfileList()
+local function ReadSettingList()
     EnsureFolders()
-    local ok, raw = pcall(readfile, PROFILES_FILE)
+    local ok, raw = pcall(readfile, SETTINGS_FILE)
     if not ok or not raw then return {} end
     local ok2, data = pcall(function()
         return game:GetService("HttpService"):JSONDecode(raw)
@@ -167,49 +167,49 @@ local function ReadProfileList()
     return {}
 end
 
-local function WriteProfileList(list)
+local function WriteSettingList(list)
     EnsureFolders()
     local ok, json = pcall(function()
         return game:GetService("HttpService"):JSONEncode(list)
     end)
-    if ok then pcall(writefile, PROFILES_FILE, json) end
+    if ok then pcall(writefile, SETTINGS_FILE, json) end
 end
 
-local function AddProfileToList(profileName)
-    local list = ReadProfileList()
+local function AddSettingToList(settingName)
+    local list = ReadSettingList()
     for _, v in ipairs(list) do
-        if v == profileName then return end
+        if v == settingName then return end
     end
-    table.insert(list, profileName)
-    WriteProfileList(list)
+    table.insert(list, settingName)
+    WriteSettingList(list)
 end
 
-local function RemoveProfileFromList(profileName)
-    local list = ReadProfileList()
+local function RemoveSettingFromList(settingName)
+    local list = ReadSettingList()
     local newList = {}
     for _, v in ipairs(list) do
-        if v ~= profileName then table.insert(newList, v) end
+        if v ~= settingName then table.insert(newList, v) end
     end
-    WriteProfileList(newList)
+    WriteSettingList(newList)
 end
 
 local function ReadAutoLoad()
     EnsureFolders()
     local ok, raw = pcall(readfile, AUTOLOAD_FILE)
-    if not ok or not raw then return {enabled = false, profile = nil} end
+    if not ok or not raw then return {enabled = false, setting = nil} end
     local ok2, data = pcall(function()
         return game:GetService("HttpService"):JSONDecode(raw)
     end)
     if ok2 and type(data) == "table" then
-        return {enabled = data.enabled == true, profile = data.profile}
+        return {enabled = data.enabled == true, setting = data.setting}
     end
-    return {enabled = false, profile = nil}
+    return {enabled = false, setting = nil}
 end
 
-local function WriteAutoLoad(enabled, profile)
+local function WriteAutoLoad(enabled, setting)
     EnsureFolders()
     local ok, json = pcall(function()
-        return game:GetService("HttpService"):JSONEncode({enabled = enabled, profile = profile})
+        return game:GetService("HttpService"):JSONEncode({enabled = enabled, setting = setting})
     end)
     if ok then pcall(writefile, AUTOLOAD_FILE, json) end
 end
@@ -220,11 +220,11 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.6.1 | occult"
+    local SubTitle = config.SubTitle or "v2.7 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
     local _configData = {}
-    EnsureFolders() -- Creaza folderele inca de la pornire
+    EnsureFolders()
 
     local ScreenGui = Create("ScreenGui", {
         Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
@@ -428,9 +428,9 @@ function ACTED:CreateWindow(config)
         return true
     end
 
-    function Window:SaveConfig(profileName)
+    function Window:SaveConfig(settingName)
         EnsureFolders()
-        profileName = profileName or "default"
+        settingName = settingName or "default"
         local json = SerializeConfig()
         if not json then
             Window:Notify("Config", "Serialization failed.", "error", 3)
@@ -438,154 +438,154 @@ function ACTED:CreateWindow(config)
         end
         local saved = false
         pcall(function()
-            writefile(ProfileFileName(profileName), json)
-            AddProfileToList(profileName)
+            writefile(SettingFileName(settingName), json)
+            AddSettingToList(settingName)
             saved = true
         end)
         if saved then
-            Window:Notify("Config", "Saved profile: " .. profileName, "success", 3)
+            Window:Notify("Config", "Saved setting: " .. settingName, "success", 3)
         else
-            print("[ACTED Config Save] " .. profileName .. ":\n" .. json)
+            print("[ACTED Config Save] " .. settingName .. ":\n" .. json)
             Window:Notify("Config", "Saved to console (no writefile).", "warning", 3)
         end
         return json
     end
 
-    function Window:LoadConfig(profileName, jsonString)
+    function Window:LoadConfig(settingName, jsonString)
         EnsureFolders()
-        profileName = profileName or "default"
+        settingName = settingName or "default"
         local json = jsonString
         if not json then
-            local ok, content = pcall(readfile, ProfileFileName(profileName))
+            local ok, content = pcall(readfile, SettingFileName(settingName))
             if ok and content then
                 json = content
             else
-                Window:Notify("Config", "Profile not found: " .. profileName, "error", 3)
+                Window:Notify("Config", "File not found: " .. settingName, "error", 3)
                 return
             end
         end
         if ApplyConfig(json) then
-            Window:Notify("Config", "Loaded profile: " .. profileName, "success", 3)
+            Window:Notify("Config", "Loaded setting: " .. settingName, "success", 3)
         else
             Window:Notify("Config", "Load failed: invalid data.", "error", 3)
         end
     end
 
-    function Window:DeleteConfig(profileName)
+    function Window:DeleteConfig(settingName)
         EnsureFolders()
-        profileName = profileName or "default"
-        pcall(function() delfile(ProfileFileName(profileName)) end)
-        RemoveProfileFromList(profileName)
-        Window:Notify("Config", "Deleted profile: " .. profileName, "info", 3)
+        settingName = settingName or "default"
+        pcall(function() delfile(SettingFileName(settingName)) end)
+        RemoveSettingFromList(settingName)
+        Window:Notify("Config", "Deleted setting: " .. settingName, "info", 3)
     end
 
     function Window:AddConfigManager(section)
-        section:AddLabel("CONFIG MANAGER", Theme.Accent)
+        section:AddLabel("SETTINGS MANAGER", Theme.Accent)
         section:AddDivider()
 
-        local nameBox = section:AddTextbox("Profile name", "Enter profile name...", "", function() end)
-        local profileList = ReadProfileList()
-        local selectedProfile = nil
-        local profileDropdown = nil
+        local nameBox = section:AddTextbox("Setting name", "Enter setting name...", "", function() end)
+        local settingList = ReadSettingList()
+        local selectedSetting = nil
+        local settingDropdown = nil
         local autoLoadToggle = nil
         local autoLoadData = ReadAutoLoad()
 
-        if autoLoadData.enabled and autoLoadData.profile then
-            for _, v in ipairs(profileList) do
-                if v == autoLoadData.profile then selectedProfile = v; break end
+        if autoLoadData.enabled and autoLoadData.setting then
+            for _, v in ipairs(settingList) do
+                if v == autoLoadData.setting then selectedSetting = v; break end
             end
         end
 
         local function RefreshDropdown()
-            profileList = ReadProfileList()
-            if profileDropdown then
+            settingList = ReadSettingList()
+            if settingDropdown then
                 local found = false
-                for _, v in ipairs(profileList) do
-                    if v == selectedProfile then found = true; break end
+                for _, v in ipairs(settingList) do
+                    if v == selectedSetting then found = true; break end
                 end
-                if not found then selectedProfile = nil end
-                profileDropdown.SetOptions(profileList, selectedProfile)
+                if not found then selectedSetting = nil end
+                settingDropdown.SetOptions(settingList, selectedSetting)
             end
         end
 
-        profileDropdown = section:AddDropdown("Select profile", profileList, selectedProfile, function(v)
-            selectedProfile = v
+        settingDropdown = section:AddDropdown("Select setting", settingList, selectedSetting, function(v)
+            selectedSetting = v
             if autoLoadToggle and autoLoadToggle.Get() then
-                WriteAutoLoad(true, selectedProfile)
-                Window:Notify("Auto Load", "Now auto-loading: " .. tostring(selectedProfile), "info", 3)
+                WriteAutoLoad(true, selectedSetting)
+                Window:Notify("Auto Load", "Now auto-loading: " .. tostring(selectedSetting), "info", 3)
             end
         end)
 
-        autoLoadToggle = section:AddToggle("Auto Load Profile", autoLoadData.enabled, function(state)
+        autoLoadToggle = section:AddToggle("Auto Load Setting", autoLoadData.enabled, function(state)
             if state then
-                if not selectedProfile or selectedProfile == "" then
-                    Window:Notify("Auto Load", "Select a profile first.", "warning", 3)
+                if not selectedSetting or selectedSetting == "" then
+                    Window:Notify("Auto Load", "Select a setting first.", "warning", 3)
                     autoLoadToggle.Set(false)
                     WriteAutoLoad(false, nil)
                     return
                 end
-                WriteAutoLoad(true, selectedProfile)
-                Window:Notify("Auto Load", "Enabled for: " .. tostring(selectedProfile), "success", 3)
+                WriteAutoLoad(true, selectedSetting)
+                Window:Notify("Auto Load", "Enabled for: " .. tostring(selectedSetting), "success", 3)
             else
                 WriteAutoLoad(false, nil)
                 Window:Notify("Auto Load", "Auto load disabled.", "info", 3)
             end
         end)
 
-        section:AddButton("Save profile", function()
+        section:AddButton("Save setting", function()
             local name = nameBox.Get()
-            if not name or name == "" then name = selectedProfile end
+            if not name or name == "" then name = selectedSetting end
             if not name or name == "" then
-                Window:Notify("Config", "Type a profile name first.", "warning", 3)
+                Window:Notify("Config", "Type a setting name first.", "warning", 3)
                 return
             end
             Window:SaveConfig(name)
             RefreshDropdown()
         end)
 
-        section:AddButton("Load selected profile", function()
-            local name = selectedProfile
+        section:AddButton("Load selected setting", function()
+            local name = selectedSetting
             if not name or name == "" then
-                Window:Notify("Config", "Select a profile from the dropdown.", "warning", 3)
+                Window:Notify("Config", "Select a setting from the dropdown.", "warning", 3)
                 return
             end
             Window:LoadConfig(name)
         end)
 
-        section:AddButton("Delete selected profile", function()
-            local name = selectedProfile
+        section:AddButton("Delete selected setting", function()
+            local name = selectedSetting
             if not name or name == "" then
-                Window:Notify("Config", "Select a profile to delete.", "warning", 3)
+                Window:Notify("Config", "Select a setting to delete.", "warning", 3)
                 return
             end
             Window:DeleteConfig(name)
             local al = ReadAutoLoad()
-            if al.enabled and al.profile == name then
+            if al.enabled and al.setting == name then
                 WriteAutoLoad(false, nil)
                 if autoLoadToggle then autoLoadToggle.Set(false) end
             end
-            selectedProfile = nil
+            selectedSetting = nil
             RefreshDropdown()
         end)
 
-        section:AddButton("Refresh profiles", function()
+        section:AddButton("Refresh settings list", function()
             RefreshDropdown()
-            Window:Notify("Config", "Profile list refreshed.", "info", 2)
+            Window:Notify("Config", "Settings list refreshed.", "info", 2)
         end)
 
         section:AddDivider()
 
-        if autoLoadData.enabled and autoLoadData.profile then
-            local targetProfile = autoLoadData.profile
+        if autoLoadData.enabled and autoLoadData.setting then
+            local targetSetting = autoLoadData.setting
             local exists = false
-            for _, v in ipairs(ReadProfileList()) do
-                if v == targetProfile then exists = true; break end
+            for _, v in ipairs(ReadSettingList()) do
+                if v == targetSetting then exists = true; break end
             end
             if exists then
                 task.delay(0.8, function()
-                    Window:LoadConfig(targetProfile)
-                    selectedProfile = targetProfile
-                    profileDropdown.SetOptions(ReadProfileList(), targetProfile)
+                    Window:LoadConfig(targetSetting)
+                    selectedSetting = targetSetting
+                    settingDropdown.SetOptions(ReadSettingList(), targetSetting)
                 end)
             else
                 WriteAutoLoad(false, nil)
@@ -959,7 +959,7 @@ function ACTED:CreateWindow(config)
             end
 
             -- ==========================
-            -- DROPDOWN
+            -- DROPDOWN (SMART UP/DOWN + SCROLL FIX)
             -- ==========================
             function Section:AddDropdown(label, options, default, callback, configKey)
                 callback = callback or function() end
@@ -1089,7 +1089,6 @@ function ACTED:CreateWindow(config)
                         local isUp = spaceBelow < targetH
                         local currentH = DDList.AbsoluteSize.Y
                         local targetY = isUp and (absPos.Y - currentH - 4) or (absPos.Y + btnSize.Y + 4)
-                        
                         DDList.Position = UDim2.new(0, absPos.X, 0, targetY)
                     end)
 
@@ -1332,124 +1331,105 @@ function ACTED:CreateWindow(config)
     end
 
     -- ============================================================
-    -- Notifications (New Beautiful Design)
+    -- Beautiful Animated Notifications
     -- ============================================================
     function Window:Notify(title, message, ntype, duration)
-        ntype = ntype or "info"
+        ntype    = ntype    or "info"
         duration = duration or 3
+        local colors = {info = Theme.Accent, success = Theme.Success, warning = Theme.Warning, error = Theme.Danger}
+        local icons  = {info = "ℹ", success = "✓", warning = "!", error = "✕"}
+        local col  = colors[ntype] or Theme.Accent
+        local icon = icons[ntype]  or "ℹ"
 
-        local NotifTheme = {
-            info    = Color3.fromRGB(80, 160, 255),
-            success = Color3.fromRGB(80, 220, 140),
-            warning = Color3.fromRGB(250, 180, 50),
-            error   = Color3.fromRGB(255, 70, 70)
-        }
-        
-        local iconChars = {info = "i", success = "✓", warning = "!", error = "✕"}
-        local mainColor = NotifTheme[ntype] or NotifTheme.info
-        local iconChar  = iconChars[ntype] or "i"
+        -- Container Holder
+        local NHolder = ScreenGui:FindFirstChild("NotifHolder") or Create("Frame", {
+            Name = "NotifHolder", Parent = ScreenGui,
+            Position = UDim2.new(1, -320, 1, -40),
+            Size = UDim2.new(0, 310, 0, 0),
+            BackgroundTransparency = 1, ZIndex = 200,
+        })
+        if not NHolder.Parent then NHolder.Parent = ScreenGui end
+        local _ = NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLayout", {
+            Parent = NHolder, VerticalAlignment = Enum.VerticalAlignment.Bottom,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10),
+        })
 
-        local NHolder = ScreenGui:FindFirstChild("ACTED_Notifs")
-        if not NHolder then
-            NHolder = Create("Frame", {
-                Name = "ACTED_Notifs", Parent = ScreenGui,
-                Position = UDim2.new(1, -310, 1, -20),
-                Size = UDim2.new(0, 290, 1, 0),
-                BackgroundTransparency = 1, ZIndex = 300,
-            })
-            Create("UIListLayout", {
-                Parent = NHolder, VerticalAlignment = Enum.VerticalAlignment.Bottom,
-                HorizontalAlignment = Enum.HorizontalAlignment.Center,
-                SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10),
-            })
-            Create("UIPadding", {Parent = NHolder, PaddingBottom = UDim.new(0, 20)})
-        end
-
+        -- Wrapper invizibil pentru a anima înălțimea (layout stacking flow)
         local NWrap = Create("Frame", {
-            Parent = NHolder, Size = UDim2.new(1, 0, 0, 70),
-            BackgroundTransparency = 1, ZIndex = 300,
-            Position = UDim2.new(1.5, 0, 0, 0)
+            Parent = NHolder, Size = UDim2.new(1, 0, 0, 0),
+            BackgroundTransparency = 1, ClipsDescendants = false, ZIndex = 200,
         })
 
-        local NBG = Create("Frame", {
-            Parent = NWrap, Size = UDim2.new(1, 0, 1, 0),
-            BackgroundColor3 = Color3.fromRGB(15, 12, 25),
-            BackgroundTransparency = 0.1, ClipsDescendants = true, ZIndex = 301
+        -- Design-ul vizual propriu-zis
+        local NFrame = Create("Frame", {
+            Parent = NWrap, Size = UDim2.new(1, 0, 0, 74),
+            Position = UDim2.new(1.2, 0, 0, 0),
+            BackgroundColor3 = Theme.SurfaceAlt,
+            BackgroundTransparency = 0.05,
+            ClipsDescendants = true, ZIndex = 200,
         })
-        AddCorner(NBG, 8)
-        AddStroke(NBG, mainColor, 1.5, 0.5)
+        AddCorner(NFrame, 10)
+        local nStroke = AddStroke(NFrame, col, 1.2, 0.4)
 
-        local TopGlow = Create("Frame", {
-            Parent = NBG, Size = UDim2.new(1, 0, 0, 30),
-            BackgroundColor3 = mainColor, BackgroundTransparency = 0.8,
-            BorderSizePixel = 0, ZIndex = 301
+        -- Iconiță modernă, perfect rotunjită
+        local iconHolder = Create("Frame", {
+            Parent = NFrame, Position = UDim2.new(0, 14, 0.5, -18),
+            Size = UDim2.new(0, 36, 0, 36),
+            BackgroundColor3 = col, BackgroundTransparency = 0.85, ZIndex = 201,
         })
-        Create("UIGradient", {
-            Parent = TopGlow, Rotation = 90,
-            Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0),
-                NumberSequenceKeypoint.new(1, 1)
-            })
-        })
-
-        local IconCircle = Create("Frame", {
-            Parent = NBG, Size = UDim2.new(0, 32, 0, 32),
-            Position = UDim2.new(0, 12, 0.5, -16),
-            BackgroundColor3 = mainColor, BackgroundTransparency = 0.8,
-            ZIndex = 302
-        })
-        AddCorner(IconCircle, 16)
-        AddStroke(IconCircle, mainColor, 1, 0)
-
+        AddCorner(iconHolder, 18)
+        AddStroke(iconHolder, col, 1.5, 0.1)
         Create("TextLabel", {
-            Parent = IconCircle, Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1, Text = iconChar,
-            TextColor3 = mainColor, Font = Enum.Font.GothamBlack, TextSize = 16,
-            ZIndex = 303
+            Parent = iconHolder, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1, Text = icon,
+            TextColor3 = col, Font = Enum.Font.GothamBold, TextSize = 16, ZIndex = 202,
         })
 
+        -- Texte
         Create("TextLabel", {
-            Parent = NBG, Size = UDim2.new(1, -60, 0, 20),
-            Position = UDim2.new(0, 54, 0, 14),
+            Parent = NFrame, Position = UDim2.new(0, 62, 0, 14), Size = UDim2.new(1, -74, 0, 16),
             BackgroundTransparency = 1, Text = title,
-            TextColor3 = Color3.fromRGB(255, 255, 255), Font = Enum.Font.GothamBold, TextSize = 14,
-            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 303
+            TextColor3 = Theme.TextPrimary, Font = Enum.Font.GothamBold, TextSize = 13,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 201,
         })
-
         Create("TextLabel", {
-            Parent = NBG, Size = UDim2.new(1, -60, 0, 20),
-            Position = UDim2.new(0, 54, 0, 34),
+            Parent = NFrame, Position = UDim2.new(0, 62, 0, 32), Size = UDim2.new(1, -74, 0, 26),
             BackgroundTransparency = 1, Text = message,
-            TextColor3 = Color3.fromRGB(180, 180, 200), Font = Enum.Font.GothamMedium, TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 303
+            TextColor3 = Theme.TextSecondary, Font = Enum.Font.Gotham, TextSize = 11,
+            TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+            TextWrapped = true, ZIndex = 201,
         })
 
-        local TimeBarBG = Create("Frame", {
-            Parent = NBG, Size = UDim2.new(1, 0, 0, 3),
-            Position = UDim2.new(0, 0, 1, -3),
-            BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 0.5,
-            BorderSizePixel = 0, ZIndex = 304
-        })
-        local TimeBar = Create("Frame", {
-            Parent = TimeBarBG, Size = UDim2.new(1, 0, 1, 0),
-            BackgroundColor3 = mainColor, BorderSizePixel = 0, ZIndex = 305
+        -- Bară de progres subțire la baza notificării
+        local Prog = Create("Frame", {
+            Parent = NFrame, Size = UDim2.new(1, 0, 0, 2),
+            Position = UDim2.new(0, 0, 1, -2),
+            BackgroundColor3 = col, ZIndex = 203, BorderSizePixel = 0,
         })
 
-        -- Entry animation
-        Tween(NWrap, {Position = UDim2.new(0, 0, 0, 0)}, 0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+        -- Animația de intrare
+        Tween(NWrap, {Size = UDim2.new(1, 0, 0, 74)}, 0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        task.delay(0.05, function()
+            Tween(NFrame, {Position = UDim2.new(0, 0, 0, 0)}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+            Tween(nStroke, {Transparency = 0}, 0.5, Enum.EasingStyle.Sine)
+        end)
 
-        -- Progress animation
-        Tween(TimeBar, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
+        -- Animația barei de progres
+        Tween(Prog, {Size = UDim2.new(0, 0, 0, 2)}, duration, Enum.EasingStyle.Linear)
 
-        -- Exit animation
+        -- Animația de ieșire
         task.delay(duration, function()
-            Tween(NWrap, {Position = UDim2.new(1.5, 0, 0, 0)}, 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.In)
-            task.delay(0.4, function() NWrap:Destroy() end)
+            Tween(NFrame, {Position = UDim2.new(1.2, 0, 0, 0), BackgroundTransparency = 1}, 0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+            task.delay(0.4, function()
+                Tween(NWrap, {Size = UDim2.new(1, 0, 0, 0)}, 0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+                task.delay(0.25, function() NWrap:Destroy() end)
+            end)
         end)
     end
 
     task.delay(0.6, function()
-        Window:Notify("ACTED", "Was loaded successfully.", "success", 3)
+        Window:Notify("ACTED", "Loaded core modules.", "success", 3)
     end)
 
     return Window
