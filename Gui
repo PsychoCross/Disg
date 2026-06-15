@@ -4,7 +4,7 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.7 | Premium Profiles System & Beautiful Redesigned Notifications
+-- Version: 2.6.1 | Fixes: New Settings Folder, "Profiles" instead of "Slots", Beautiful Notify
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -135,15 +135,14 @@ end
 local _openDropdown = nil
 
 -- ============================================================
--- Profile & Settings Directory Management
+-- Config profile management & Folder System
 -- ============================================================
 local HUB_FOLDER      = "ACTED"
 local CONFIG_FOLDER   = HUB_FOLDER .. "/configs"
 local SETTINGS_FOLDER = HUB_FOLDER .. "/settings"
-local CONFIG_PREFIX   = "profile_"
-local PROFILES_FILE   = SETTINGS_FOLDER .. "/profiles.json"
--- Autoload configurat să se salveze în folderul principal de settings separat
-local AUTOLOAD_FILE   = SETTINGS_FOLDER .. "/autoload.json"
+local CONFIG_PREFIX   = "ACTED_config_"
+local PROFILES_FILE   = SETTINGS_FOLDER .. "/ACTED_profiles.json"
+local AUTOLOAD_FILE   = SETTINGS_FOLDER .. "/ACTED_autoload.json"
 
 local function EnsureFolders()
     pcall(function()
@@ -221,11 +220,11 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.7 | occult"
+    local SubTitle = config.SubTitle or "v2.6.1 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
     local _configData = {}
-    EnsureFolders()
+    EnsureFolders() -- Creaza folderele inca de la pornire
 
     local ScreenGui = Create("ScreenGui", {
         Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
@@ -434,7 +433,7 @@ function ACTED:CreateWindow(config)
         profileName = profileName or "default"
         local json = SerializeConfig()
         if not json then
-            Window:Notify("Profiles", "Serialization failed.", "error", 3)
+            Window:Notify("Config", "Serialization failed.", "error", 3)
             return
         end
         local saved = false
@@ -444,10 +443,10 @@ function ACTED:CreateWindow(config)
             saved = true
         end)
         if saved then
-            Window:Notify("Profiles", "Saved profile: " .. profileName, "success", 3)
+            Window:Notify("Config", "Saved profile: " .. profileName, "success", 3)
         else
             print("[ACTED Config Save] " .. profileName .. ":\n" .. json)
-            Window:Notify("Profiles", "Saved to console (no writefile).", "warning", 3)
+            Window:Notify("Config", "Saved to console (no writefile).", "warning", 3)
         end
         return json
     end
@@ -461,14 +460,14 @@ function ACTED:CreateWindow(config)
             if ok and content then
                 json = content
             else
-                Window:Notify("Profiles", "Profile not found: " .. profileName, "error", 3)
+                Window:Notify("Config", "Profile not found: " .. profileName, "error", 3)
                 return
             end
         end
         if ApplyConfig(json) then
-            Window:Notify("Profiles", "Loaded profile: " .. profileName, "success", 3)
+            Window:Notify("Config", "Loaded profile: " .. profileName, "success", 3)
         else
-            Window:Notify("Profiles", "Load failed: invalid data.", "error", 3)
+            Window:Notify("Config", "Load failed: invalid data.", "error", 3)
         end
     end
 
@@ -477,14 +476,14 @@ function ACTED:CreateWindow(config)
         profileName = profileName or "default"
         pcall(function() delfile(ProfileFileName(profileName)) end)
         RemoveProfileFromList(profileName)
-        Window:Notify("Profiles", "Deleted profile: " .. profileName, "info", 3)
+        Window:Notify("Config", "Deleted profile: " .. profileName, "info", 3)
     end
 
     function Window:AddConfigManager(section)
-        section:AddLabel("PROFILE CONFIGURATIONS", Theme.Accent)
+        section:AddLabel("CONFIG MANAGER", Theme.Accent)
         section:AddDivider()
 
-        local nameBox = section:AddTextbox("Profile Name", "Enter profile name...", "", function() end)
+        local nameBox = section:AddTextbox("Profile name", "Enter profile name...", "", function() end)
         local profileList = ReadProfileList()
         local selectedProfile = nil
         local profileDropdown = nil
@@ -509,7 +508,7 @@ function ACTED:CreateWindow(config)
             end
         end
 
-        profileDropdown = section:AddDropdown("Select Profile", profileList, selectedProfile, function(v)
+        profileDropdown = section:AddDropdown("Select profile", profileList, selectedProfile, function(v)
             selectedProfile = v
             if autoLoadToggle and autoLoadToggle.Get() then
                 WriteAutoLoad(true, selectedProfile)
@@ -517,7 +516,7 @@ function ACTED:CreateWindow(config)
             end
         end)
 
-        autoLoadToggle = section:AddToggle("Auto Load Selected", autoLoadData.enabled, function(state)
+        autoLoadToggle = section:AddToggle("Auto Load Profile", autoLoadData.enabled, function(state)
             if state then
                 if not selectedProfile or selectedProfile == "" then
                     Window:Notify("Auto Load", "Select a profile first.", "warning", 3)
@@ -533,30 +532,30 @@ function ACTED:CreateWindow(config)
             end
         end)
 
-        section:AddButton("Save Profile", function()
+        section:AddButton("Save profile", function()
             local name = nameBox.Get()
             if not name or name == "" then name = selectedProfile end
             if not name or name == "" then
-                Window:Notify("Profiles", "Type or select a profile name first.", "warning", 3)
+                Window:Notify("Config", "Type a profile name first.", "warning", 3)
                 return
             end
             Window:SaveConfig(name)
             RefreshDropdown()
         end)
 
-        section:AddButton("Load Profile", function()
+        section:AddButton("Load selected profile", function()
             local name = selectedProfile
             if not name or name == "" then
-                Window:Notify("Profiles", "Select a profile from the list.", "warning", 3)
+                Window:Notify("Config", "Select a profile from the dropdown.", "warning", 3)
                 return
             end
             Window:LoadConfig(name)
         end)
 
-        section:AddButton("Delete Profile", function()
+        section:AddButton("Delete selected profile", function()
             local name = selectedProfile
             if not name or name == "" then
-                Window:Notify("Profiles", "Select a profile to delete.", "warning", 3)
+                Window:Notify("Config", "Select a profile to delete.", "warning", 3)
                 return
             end
             Window:DeleteConfig(name)
@@ -569,9 +568,9 @@ function ACTED:CreateWindow(config)
             RefreshDropdown()
         end)
 
-        section:AddButton("Refresh List", function()
+        section:AddButton("Refresh profiles", function()
             RefreshDropdown()
-            Window:Notify("Profiles", "Profiles refreshed.", "info", 2)
+            Window:Notify("Config", "Profile list refreshed.", "info", 2)
         end)
 
         section:AddDivider()
@@ -960,7 +959,7 @@ function ACTED:CreateWindow(config)
             end
 
             -- ==========================
-            -- DROPDOWN (SMART UP/DOWN + SCROLL FIX)
+            -- DROPDOWN
             -- ==========================
             function Section:AddDropdown(label, options, default, callback, configKey)
                 callback = callback or function() end
@@ -1047,7 +1046,7 @@ function ACTED:CreateWindow(config)
                             Parent = DDList, Size = UDim2.new(1, 0, 0, 26),
                             BackgroundColor3 = Theme.Surface,
                             Text = opt,
-                            TextColor3 = (opt == selected) woodland and Theme.Accent or Theme.TextPrimary,
+                            TextColor3 = (opt == selected) and Theme.Accent or Theme.TextPrimary,
                             Font = Enum.Font.Gotham, TextSize = 12,
                             AutoButtonColor = false, ZIndex = 51,
                         })
@@ -1207,7 +1206,7 @@ function ACTED:CreateWindow(config)
                     end
                 end)
                 UserInputService.InputEnded:Connect(function(inp)
-                    if inp.UserInputType == Enum.MouseButton1 then hSliding = false end
+                    if inp.UserInputType == Enum.UserInputType.MouseButton1 then hSliding = false end
                 end)
 
                 local SwatchBtn = Create("TextButton", {
@@ -1333,155 +1332,124 @@ function ACTED:CreateWindow(config)
     end
 
     -- ============================================================
-    -- REDESIGNED NOTIFICATIONS SYSTEM (PREMIUM & BEAUTIFUL V2)
+    -- Notifications (New Beautiful Design)
     -- ============================================================
     function Window:Notify(title, message, ntype, duration)
-        ntype    = ntype    or "info"
-        duration = duration or 3.5
-        
-        local colors = {
-            info    = Theme.Accent, 
-            success = Theme.Success, 
-            warning = Theme.Warning, 
-            error   = Theme.Danger
-        }
-        local icons  = {
-            info    = "✦", 
-            success = "✔", 
-            warning = "⚠", 
-            error   = "✖"
+        ntype = ntype or "info"
+        duration = duration or 3
+
+        local NotifTheme = {
+            info    = Color3.fromRGB(80, 160, 255),
+            success = Color3.fromRGB(80, 220, 140),
+            warning = Color3.fromRGB(250, 180, 50),
+            error   = Color3.fromRGB(255, 70, 70)
         }
         
-        local col  = colors[ntype] or Theme.Accent
-        local icon = icons[ntype]  or "✦"
+        local iconChars = {info = "i", success = "✓", warning = "!", error = "✕"}
+        local mainColor = NotifTheme[ntype] or NotifTheme.info
+        local iconChar  = iconChars[ntype] or "i"
 
-        -- Suport container pentru stivuire fluidă în colțul din dreapta jos
-        local NHolder = ScreenGui:FindFirstChild("ACTED_NotifContainer") or Create("Frame", {
-            Name = "ACTED_NotifContainer", 
-            Parent = ScreenGui,
-            Position = UDim2.new(1, -310, 1, -360),
-            Size = UDim2.new(0, 290, 0, 340),
-            BackgroundTransparency = 1,
-            ZIndex = 99999,
-        })
-        
-        local _ = NHolder:FindFirstChildOfClass("UIListLayout") or Create("UIListLayout", {
-            Parent = NHolder, 
-            VerticalAlignment = Enum.VerticalAlignment.Bottom,
-            SortOrder = Enum.SortOrder.LayoutOrder, 
-            Padding = UDim.new(0, 10),
-        })
+        local NHolder = ScreenGui:FindFirstChild("ACTED_Notifs")
+        if not NHolder then
+            NHolder = Create("Frame", {
+                Name = "ACTED_Notifs", Parent = ScreenGui,
+                Position = UDim2.new(1, -310, 1, -20),
+                Size = UDim2.new(0, 290, 1, 0),
+                BackgroundTransparency = 1, ZIndex = 300,
+            })
+            Create("UIListLayout", {
+                Parent = NHolder, VerticalAlignment = Enum.VerticalAlignment.Bottom,
+                HorizontalAlignment = Enum.HorizontalAlignment.Center,
+                SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 10),
+            })
+            Create("UIPadding", {Parent = NHolder, PaddingBottom = UDim.new(0, 20)})
+        end
 
-        -- Wrapper animat
         local NWrap = Create("Frame", {
-            Parent = NHolder, 
-            Size = UDim2.new(1, 0, 0, 68),
-            BackgroundTransparency = 1, 
-            ClipsDescendants = false,
-            ZIndex = 100,
+            Parent = NHolder, Size = UDim2.new(1, 0, 0, 70),
+            BackgroundTransparency = 1, ZIndex = 300,
+            Position = UDim2.new(1.5, 0, 0, 0)
         })
 
-        -- Structura principala a notificării (Stil Minimalist / Cyberpunk Ultra Clean)
-        local NFrame = Create("Frame", {
-            Parent = NWrap, 
-            Size = UDim2.new(1, 40, 1, 0), -- Pleacă puțin mai mare spre dreapta din ecran
-            Position = UDim2.new(1, 0, 0, 0),
-            BackgroundColor3 = Theme.Surface,
-            BackgroundTransparency = 0.04,
-            ZIndex = 101,
+        local NBG = Create("Frame", {
+            Parent = NWrap, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = Color3.fromRGB(15, 12, 25),
+            BackgroundTransparency = 0.1, ClipsDescendants = true, ZIndex = 301
         })
-        AddCorner(NFrame, 10)
-        
-        -- Border Glow subtil
-        local nStroke = AddStroke(NFrame, col, 1, 0.1)
+        AddCorner(NBG, 8)
+        AddStroke(NBG, mainColor, 1.5, 0.5)
 
-        -- Icon Glow dinamic pe fundal
-        local iconGlow = Create("Frame", {
-            Parent = NFrame,
+        local TopGlow = Create("Frame", {
+            Parent = NBG, Size = UDim2.new(1, 0, 0, 30),
+            BackgroundColor3 = mainColor, BackgroundTransparency = 0.8,
+            BorderSizePixel = 0, ZIndex = 301
+        })
+        Create("UIGradient", {
+            Parent = TopGlow, Rotation = 90,
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0),
+                NumberSequenceKeypoint.new(1, 1)
+            })
+        })
+
+        local IconCircle = Create("Frame", {
+            Parent = NBG, Size = UDim2.new(0, 32, 0, 32),
             Position = UDim2.new(0, 12, 0.5, -16),
-            Size = UDim2.new(0, 32, 0, 32),
-            BackgroundColor3 = col,
-            BackgroundTransparency = 0.88,
-            ZIndex = 102,
+            BackgroundColor3 = mainColor, BackgroundTransparency = 0.8,
+            ZIndex = 302
         })
-        AddCorner(iconGlow, 8)
-        
-        local iconLabel = Create("TextLabel", {
-            Parent = iconGlow, 
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1, 
-            Text = icon,
-            TextColor3 = col, 
-            Font = Enum.Font.GothamBold, 
-            TextSize = 14,
-            ZIndex = 103,
-        })
+        AddCorner(IconCircle, 16)
+        AddStroke(IconCircle, mainColor, 1, 0)
 
-        -- Label Titlu
         Create("TextLabel", {
-            Parent = NFrame, 
-            Position = UDim2.new(0, 54, 0, 12), 
-            Size = UDim2.new(1, -70, 0, 16),
-            BackgroundTransparency = 1, 
-            Text = title:upper(),
-            TextColor3 = Theme.TextPrimary, 
-            Font = Enum.Font.GothamBold, 
-            TextSize = 12,
-            TextXAlignment = Enum.TextXAlignment.Left, 
-            ZIndex = 102,
+            Parent = IconCircle, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1, Text = iconChar,
+            TextColor3 = mainColor, Font = Enum.Font.GothamBlack, TextSize = 16,
+            ZIndex = 303
         })
 
-        -- Label Mesaj
         Create("TextLabel", {
-            Parent = NFrame, 
-            Position = UDim2.new(0, 54, 0, 28), 
-            Size = UDim2.new(1, -70, 0, 28),
-            BackgroundTransparency = 1, 
-            Text = message,
-            TextColor3 = Theme.TextSecondary, 
-            Font = Enum.Font.Gotham, 
-            TextSize = 11,
-            TextXAlignment = Enum.TextXAlignment.Left, 
-            TextWrapped = true, 
-            ZIndex = 102,
+            Parent = NBG, Size = UDim2.new(1, -60, 0, 20),
+            Position = UDim2.new(0, 54, 0, 14),
+            BackgroundTransparency = 1, Text = title,
+            TextColor3 = Color3.fromRGB(255, 255, 255), Font = Enum.Font.GothamBold, TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 303
         })
 
-        -- Premium Minimal Progress Bar (O linie neon extrem de fină plasată la baza ferestrei)
-        local ProgressLine = Create("Frame", {
-            Parent = NFrame, 
-            Position = UDim2.new(0, 0, 1, -2),
-            Size = UDim2.new(1, 0, 0, 2), 
-            BackgroundColor3 = col,
-            BorderSizePixel = 0,
-            ZIndex = 104,
+        Create("TextLabel", {
+            Parent = NBG, Size = UDim2.new(1, -60, 0, 20),
+            Position = UDim2.new(0, 54, 0, 34),
+            BackgroundTransparency = 1, Text = message,
+            TextColor3 = Color3.fromRGB(180, 180, 200), Font = Enum.Font.GothamMedium, TextSize = 12,
+            TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true, ZIndex = 303
         })
-        AddCorner(ProgressLine, 2)
 
-        -- Animație Fluidă de Intrare (Slide Elastic)
-        Tween(NFrame, {Position = UDim2.new(0, 0, 0, 0)}, 0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
-        
-        -- Pulse Effect la spawn
-        task.spawn(function()
-            iconGlow.BackgroundTransparency = 0.5
-            Tween(iconGlow, {BackgroundTransparency = 0.88}, 0.4)
-        end)
+        local TimeBarBG = Create("Frame", {
+            Parent = NBG, Size = UDim2.new(1, 0, 0, 3),
+            Position = UDim2.new(0, 0, 1, -3),
+            BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 0.5,
+            BorderSizePixel = 0, ZIndex = 304
+        })
+        local TimeBar = Create("Frame", {
+            Parent = TimeBarBG, Size = UDim2.new(1, 0, 1, 0),
+            BackgroundColor3 = mainColor, BorderSizePixel = 0, ZIndex = 305
+        })
 
-        -- Animația progress bar-ului linear în timp real
-        Tween(ProgressLine, {Size = UDim2.new(0, 0, 0, 2)}, duration, Enum.EasingStyle.Linear)
+        -- Entry animation
+        Tween(NWrap, {Position = UDim2.new(0, 0, 0, 0)}, 0.5, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
 
-        -- Ieșire fluidă din scenă după terminarea timpului
+        -- Progress animation
+        Tween(TimeBar, {Size = UDim2.new(0, 0, 1, 0)}, duration, Enum.EasingStyle.Linear)
+
+        -- Exit animation
         task.delay(duration, function()
-            Tween(NFrame, {Position = UDim2.new(1.2, 0, 0, 0), BackgroundTransparency = 1}, 0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-            Tween(nStroke, {Transparency = 1}, 0.25)
-            Tween(iconLabel, {TextTransparency = 1}, 0.2)
-            task.delay(0.4, function() 
-                NWrap:Destroy() 
-            end)
+            Tween(NWrap, {Position = UDim2.new(1.5, 0, 0, 0)}, 0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.In)
+            task.delay(0.4, function() NWrap:Destroy() end)
         end)
     end
 
     task.delay(0.6, function()
-        Window:Notify("ACTED HUB", "Interfața premium a fost încărcată.", "success", 3.5)
+        Window:Notify("ACTED", "Was loaded successfully.", "success", 3)
     end)
 
     return Window
