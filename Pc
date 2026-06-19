@@ -26,7 +26,7 @@ local LocalPlayer = Players.LocalPlayer
 -- Exemplu link valid: https://raw.githubusercontent.com/userul-tau/repo/main/logo.png
 -- ============================================================
 local ASSET_URLS = {
-    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/NewLogo",
+    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_02-02-19-197.png",
     -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
     -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
     Tabs = {
@@ -50,11 +50,15 @@ local ASSET_URLS = {
     },
 }
 
--- 📏 Dimensiunea (în px) a iconițelor de tab. Poți seta una globală și excepții per-tab.
-local TAB_ICON_SIZE = 22                 -- mărime implicită pentru toate tab-urile
-local TAB_ICON_SIZE_OVERRIDE = {
-    Combat = 30,
-    Credit = 30,
+-- 📏 Dimensiunea (în px) a iconițelor de tab. TOATE folosesc aceeași mărime de bază.
+-- Dacă o imagine pare totuși mai mică vizual (pentru că PNG-ul sursă are spațiu gol
+-- în jurul desenului, ex: Combat are margine mai mare decât Teleport), crește-i
+-- valoarea AICI (multiplier), nu modifica restul codului.
+local TAB_ICON_SIZE = 24                 -- mărime de bază (px) pentru toate tab-urile
+local TAB_ICON_SCALE = {
+    -- Nume tab = multiplicator (1 = mărime normală, 1.3 = 30% mai mare etc.)
+    -- Combat = 1.3,
+    -- Credit = 1.3,
 }
 
 -- ============================================================
@@ -802,7 +806,7 @@ function ACTED:CreateWindow(config)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
 
         if iconIsImage then
-            local iconSize = TAB_ICON_SIZE_OVERRIDE[name] or TAB_ICON_SIZE
+            local iconSize = math.floor(TAB_ICON_SIZE * (TAB_ICON_SCALE[name] or 1))
             local IconHolder = Create("Frame", {
                 Parent = TabBtn, Size = UDim2.new(0, iconSize, 0, iconSize),
                 Position = UDim2.new(0, 8, 0.5, -iconSize/2),
@@ -1543,7 +1547,7 @@ function ACTED:CreateWindow(config)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
 
         if creditsIconUrl then
-            local iconSize = TAB_ICON_SIZE_OVERRIDE.Credit or TAB_ICON_SIZE
+            local iconSize = math.floor(TAB_ICON_SIZE * (TAB_ICON_SCALE.Credit or 1))
             local IconHolder = Create("Frame", {
                 Parent = TabBtn, Size = UDim2.new(0, iconSize, 0, iconSize),
                 Position = UDim2.new(0, 8, 0.5, -iconSize/2),
