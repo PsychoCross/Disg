@@ -658,44 +658,40 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end
 
-    spawn(function()
-        local timeout = 18
-        local elapsed = 0
-        while not dismissed do
-            task.wait(0.05)
-            elapsed = elapsed + 0.05
+spawn(function()
+    local timeout = 18
+    local elapsed = 0
+    while not dismissed do
+        task.wait(0.05)
+        elapsed = elapsed + 0.05
 
-            local ok = pcall(function()
-                local total  = AssetLoader._total
-                local loaded = AssetLoader._loaded
-                local pct    = (total > 0) and (loaded / total) or 0
+        local ok = pcall(function()
+            local total  = AssetLoader._total
+            local loaded = AssetLoader._loaded
+            local pct    = (total > 0) and (loaded / total) or 0
 
-                local pctInt = math.floor(pct * 100)
-                CountLabel.Text  = loaded .. " / " .. total .. " assets"
-                StatusLabel.Text = (pct >= 1 and total > 0) and "✓ Ready!" or ("Loading assets... " .. pctInt .. "%")
-                if pct >= 1 and total > 0 then
-                    StatusLabel.TextColor3 = Theme.Success
+            local pctInt = math.floor(pct * 100)
+            CountLabel.Text  = loaded .. " / " .. total .. " assets"
+            StatusLabel.Text = (pct >= 1 and total > 0) and "✓ Ready!" or ("Loading assets... " .. pctInt .. "%")
+            if pct >= 1 and total > 0 then
+                StatusLabel.TextColor3 = Theme.Success
+            end
+            Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
+
+            local allDone = (total > 0 and loaded >= total)
+            local nothingToLoad = (total == 0 and elapsed >= 2.5)  -- <-- CRESCUT DE LA 1.5 LA 2.5
+            if allDone or nothingToLoad then
+                if allDone then
+                    Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
+                    task.wait(0.55)
                 end
-                Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
-
-                local allDone = (total > 0 and loaded >= total)
-                local nothingToLoad = (total == 0 and elapsed >= 1.5)
-                if allDone or nothingToLoad then
-                    if allDone then
-                        Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
-                        task.wait(0.55)
-                    end
-                    Dismiss()
-                end
-            end)
-            if not ok or dismissed or elapsed >= timeout then break end
-        end
-    end)
-
-    task.delay(20, Dismiss)
-
-    return {Dismiss = Dismiss}
-end
+                Dismiss()
+                return  -- <-- ADAUGĂ RETURN PENTRU A IEȘI IMEDIAT
+            end
+        end)
+        if not ok or dismissed or elapsed >= timeout then break end
+    end
+end)
 
 -- ============================================================
 -- MAIN LIBRARY
