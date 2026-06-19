@@ -4,7 +4,7 @@
 -- ██╔══██╗██║        ██║   ██╔══╝  ██║  ██║
 -- ██║  ██║╚██████╗   ██║   ███████╗██████╔╝
 -- ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚══════╝╚═════╝
--- Version: 3.1 | Fixed: AssetLoader, Loading Screen, Credits Layout
+-- Version: 3.1.1 | Fixed: Loading Lockout, Asset Threading, Extension Fallbacks
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -21,8 +21,6 @@ local LocalPlayer = Players.LocalPlayer
 
 -- ============================================================
 -- ⚙ ASSET URLs — ALL must be raw.githubusercontent.com links
--- Blob links (github.com/user/repo/blob/...) will NOT work.
--- Use raw links (raw.githubusercontent.com/user/repo/main/...)
 -- ============================================================
 local function NormalizeAssetUrl(url)
     if type(url) ~= "string" then return url end
@@ -42,21 +40,17 @@ local ASSET_URLS = {
         Rage      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-03-19-712.png",
         Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-27-427.png",
         Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19580-removebg-preview_upscaled.png",
-        -- FIX: removed .png extension (files have no extension on GitHub)
         Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport.png",
         Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-08-55-164.png",
         Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-08-231.png",
     },
 
     Socials = {
-        -- FIX: removed .png extension (files have no extension on GitHub)
         Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube.png",
         Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord.png",
     },
 
-    Avatars = {
-        -- Example: occult = "https://raw.githubusercontent.com/.../occult.png",
-    },
+    Avatars = {},
 }
 
 local function CollectAssetUrls(t, out)
@@ -114,7 +108,7 @@ local IMAGE_SIGNATURES = {
 }
 
 local function IsValidImageData(data)
-    if not data or #data < 8 then return false end
+    if not data or #data < 4 then return false end
     for _, sig in ipairs(IMAGE_SIGNATURES) do
         if data:sub(1, #sig) == sig then return true end
     end
@@ -132,15 +126,12 @@ local function DownloadTo(url, path)
         return nil
     end)
     if not ok or not data or #data == 0 then
-        warn("[ACTED] Download failed (no response): " .. tostring(url))
         return false
     end
     if not IsValidImageData(data) then
-        warn("[ACTED] URL did not return a valid image (likely 404 / wrong raw link): " .. url)
         return false
     end
     local ok2 = pcall(writefile, path, data)
-    if not ok2 then warn("[ACTED] Could not write asset to disk: " .. path) end
     return ok2
 end
 
@@ -179,11 +170,10 @@ function AssetLoader.Get(url, callback)
         if failed then AssetLoader._failed[url] = true end
         local cbs = AssetLoader._pending[url] or {}
         AssetLoader._pending[url] = nil
-        for _, cb in ipairs(cbs) do pcall(cb, result) end
+        for _, cb in ipairs(cbs) do task.spawn(pcall, cb, result) end
     end
 
     if not (SUPPORTS_HTTPGET and SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then
-        warn("[ACTED] Executor lacks HttpGet/writefile/getcustomasset. Using fallback for: " .. url)
         Finish(FALLBACK_IMAGE)
         return FALLBACK_IMAGE
     end
@@ -192,6 +182,7 @@ function AssetLoader.Get(url, callback)
     local path = UrlToFileName(url)
 
     task.spawn(function()
+        local finishedWithSuccess = false
         local ok, err = pcall(function()
             local needsDownload = true
             pcall(function() needsDownload = not isfile(path) end)
@@ -201,14 +192,17 @@ function AssetLoader.Get(url, callback)
 
             if needsDownload then
                 local good = DownloadTo(url, path)
-                if not good then Finish(FALLBACK_IMAGE, true); return end
+                if not good then return end
             end
 
             local ok2, asset = pcall(getcustomasset, path)
-            Finish((ok2 and asset) and asset or FALLBACK_IMAGE, not (ok2 and asset))
+            if ok2 and asset then
+                Finish(asset, false)
+                finishedWithSuccess = true
+            end
         end)
-        if not ok then
-            warn("[ACTED] Unexpected error loading asset: " .. tostring(url) .. " -> " .. tostring(err))
+        
+        if not finishedWithSuccess then
             Finish(FALLBACK_IMAGE, true)
         end
     end)
@@ -449,7 +443,7 @@ local function CreateLoadingScreen(screenGui, opts)
             ZIndex           = 2,
         })
         AddCorner(p, 999)
-        spawn(function()
+        task.spawn(function()
             local startX = p.Position.X.Scale
             while p and p.Parent do
                 local dur = 4 + math.random() * 4
@@ -508,7 +502,6 @@ local function CreateLoadingScreen(screenGui, opts)
         }),
     })
 
-    -- FIX: ClipsDescendants=true so logo is clipped to the circular ring
     local Ring = Create("Frame", {
         Parent           = Card,
         Size             = UDim2.new(0, 68, 0, 68),
@@ -518,8 +511,7 @@ local function CreateLoadingScreen(screenGui, opts)
         ZIndex           = 7,
     })
     AddCorner(Ring, 999)
-    local ringStroke = AddStroke(Ring, Theme.Accent, 2.5, 0)
-    spawn(function()
+    task.spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
             if not ringStroke or not ringStroke.Parent then return end
@@ -542,7 +534,7 @@ local function CreateLoadingScreen(screenGui, opts)
         ImageTransparency = 0.5,
         ZIndex = 6,
     })
-    spawn(function()
+    task.spawn(function()
         local rot = 0
         RunService.Heartbeat:Connect(function(dt)
             if not Arc or not Arc.Parent then return end
@@ -553,14 +545,13 @@ local function CreateLoadingScreen(screenGui, opts)
 
     local LogoImg = Create("ImageLabel", {
         Parent           = Ring,
-        Size             = UDim2.new(1,0,1,0),  -- FIX: fill the ring fully
+        Size             = UDim2.new(1,0,1,0),
         Position         = UDim2.new(0,0,0,0),
         BackgroundTransparency = 1,
         Image            = FALLBACK_IMAGE,
-        ScaleType        = Enum.ScaleType.Crop,  -- FIX: Crop fills circle cleanly
+        ScaleType        = Enum.ScaleType.Crop,
         ZIndex           = 8,
     })
-    -- FIX: round the image itself so it matches the circular container
     AddCorner(LogoImg, 999)
     AssetLoader.Get(ASSET_URLS.Logo, function(img)
         if LogoImg and LogoImg.Parent then
@@ -576,7 +567,7 @@ local function CreateLoadingScreen(screenGui, opts)
         TextColor3 = Theme.TextPrimary, Font = Enum.Font.GothamBlack, TextSize = 24,
         ZIndex = 7,
     })
-    spawn(function()
+    task.spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
             if not TitleLabel or not TitleLabel.Parent then return end
@@ -624,7 +615,7 @@ local function CreateLoadingScreen(screenGui, opts)
         ZIndex = 9,
     })
     AddCorner(Shine, 999)
-    spawn(function()
+    task.spawn(function()
         while Shine and Shine.Parent do
             Shine.Position = UDim2.new(-0.4,0,0,0)
             Tween(Shine, {Position = UDim2.new(1.2,0,0,0)}, 1.4, Enum.EasingStyle.Sine)
@@ -658,8 +649,8 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end
 
-    spawn(function()
-        local timeout = 18
+    task.spawn(function()
+        local timeout = 5 -- Maximum wait time down from 18 seconds
         local elapsed = 0
         while not dismissed do
             task.wait(0.05)
@@ -678,22 +669,20 @@ local function CreateLoadingScreen(screenGui, opts)
                 end
                 Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
 
-                local allDone = (total > 0 and loaded >= total)
-                local nothingToLoad = (total == 0 and elapsed >= 1.5)
-                if allDone or nothingToLoad then
-                    if allDone then
+                if (total > 0 and loaded >= total) or (elapsed >= timeout) or (total == 0 and elapsed >= 0.5) then
+                    if total > 0 and loaded >= total then
                         Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
-                        task.wait(0.55)
+                        task.wait(0.2)
                     end
                     Dismiss()
                 end
             end)
             if not ok or dismissed or elapsed >= timeout then break end
         end
+        Dismiss()
     end)
 
-    task.delay(20, Dismiss)
-
+    task.delay(6, Dismiss)
     return {Dismiss = Dismiss}
 end
 
@@ -708,7 +697,6 @@ function ACTED:CreateWindow(config)
     local LogoUrl  = config.LogoUrl  or ASSET_URLS.Logo
     local ShowLoadingScreen = config.LoadingScreen ~= false
 
-    local _configData = {}
     EnsureFolders()
 
     local AllKnownAssets = CollectAssetUrls(ASSET_URLS)
@@ -797,7 +785,6 @@ function ACTED:CreateWindow(config)
         BackgroundColor3=Theme.Surface, BorderSizePixel=0, ZIndex=9,
     })
 
-    -- FIX: ClipsDescendants=true so logo image is clipped to the rounded frame
     local LogoFrame = Create("Frame", {
         Parent=TopBar, Size=UDim2.new(0,44,0,44), Position=UDim2.new(0,6,0,4),
         BackgroundColor3=Theme.Background, ZIndex=11,
@@ -806,15 +793,14 @@ function ACTED:CreateWindow(config)
     AddCorner(LogoFrame, 10)
     local logoStroke = AddStroke(LogoFrame, Theme.Accent, 1.5)
     local LogoImage = Create("ImageLabel", {
-        Parent=LogoFrame, Size=UDim2.new(1,0,1,0),  -- FIX: fill frame fully
+        Parent=LogoFrame, Size=UDim2.new(1,0,1,0),
         Position=UDim2.new(0,0,0,0),
         BackgroundTransparency=1, Image=FALLBACK_IMAGE,
-        ScaleType=Enum.ScaleType.Crop, ZIndex=12,  -- FIX: Crop for clean fill
+        ScaleType=Enum.ScaleType.Crop, ZIndex=12,
     })
-    -- FIX: round the image so it matches the rounded frame
     AddCorner(LogoImage, 10)
     AssetLoader.Apply(LogoImage, LogoUrl)
-    spawn(function()
+    task.spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
             if not logoStroke or not logoStroke.Parent then return end
@@ -1015,7 +1001,6 @@ function ACTED:CreateWindow(config)
         end
     end
 
-    -- ── CreateTab ────────────────────────────────────────────
     function Window:CreateTab(name, icon)
         local tabData = {_sections={}}
 
@@ -1091,7 +1076,6 @@ function ACTED:CreateWindow(config)
         table.insert(Window._tabs, tabData)
         if #Window._tabs==1 then Activate() end
 
-        -- ── CreateSection ────────────────────────────────────
         function tabData:CreateSection(sTitle)
             local Section = {}
             local SFrame = Create("Frame", {
@@ -1539,14 +1523,11 @@ function ACTED:CreateWindow(config)
 
             table.insert(tabData._sections, Section)
             return Section
-        end  -- CreateSection
+        end
 
         return tabData
-    end  -- CreateTab
+    end
 
-    -- ============================================================
-    -- CREDITS TAB
-    -- ============================================================
     function Window:CreateCreditsTab(cfg)
         cfg = cfg or {}
         local tabData = {_sections={}}
@@ -1611,7 +1592,6 @@ function ACTED:CreateWindow(config)
         tabData._btn=TabBtn; tabData._page=Page; tabData._stroke=tabStroke
         table.insert(Window._tabs, tabData)
 
-        -- ── HERO BANNER ───────────────────────────────────────
         local HeroBanner = Create("Frame", {
             Parent=Page, Size=UDim2.new(1,-4,0,110),
             BackgroundColor3=Color3.fromRGB(10,6,18),
@@ -1635,7 +1615,7 @@ function ACTED:CreateWindow(config)
                 ColorSequenceKeypoint.new(1,Color3.fromRGB(20,5,50)),
             }),
         })
-        spawn(function()
+        task.spawn(function()
             local t=0
             RunService.Heartbeat:Connect(function(dt)
                 if not Aurora or not Aurora.Parent then return end
@@ -1654,7 +1634,7 @@ function ACTED:CreateWindow(config)
                 BackgroundTransparency=math.random(30,70)/100, ZIndex=4,
             })
             AddCorner(star,999)
-            spawn(function()
+            task.spawn(function()
                 local sy=star.Position.Y.Scale
                 while star and star.Parent do
                     local dur=3+math.random()*3
@@ -1668,13 +1648,12 @@ function ACTED:CreateWindow(config)
             end)
         end
 
-        -- FIX: ClipsDescendants=true so logo is clipped to the circular ring
         local LogoRing = Create("Frame", {
             Parent=HeroBanner,
             Size=UDim2.new(0,68,0,68),
             Position=UDim2.new(0,10,0.5,-34),
             BackgroundColor3=Theme.Background,
-            ClipsDescendants=true,  -- FIX
+            ClipsDescendants=true,
             ZIndex=6,
         })
         AddCorner(LogoRing, 999)
@@ -1683,14 +1662,13 @@ function ACTED:CreateWindow(config)
 
         local CreditsLogo = Create("ImageLabel", {
             Parent=LogoRing,
-            Size=UDim2.new(1,0,1,0),       -- FIX: fill the ring fully
+            Size=UDim2.new(1,0,1,0),
             Position=UDim2.new(0,0,0,0),
             BackgroundTransparency=1,
             Image=FALLBACK_IMAGE,
-            ScaleType=Enum.ScaleType.Crop,  -- FIX: Crop fills circle cleanly
+            ScaleType=Enum.ScaleType.Crop,
             ZIndex=7,
         })
-        -- FIX: round image itself to match the circular container
         AddCorner(CreditsLogo, 999)
         AssetLoader.Apply(CreditsLogo, cfg.logo or ASSET_URLS.Logo)
 
@@ -1704,7 +1682,7 @@ function ACTED:CreateWindow(config)
             Font=Enum.Font.GothamBlack, TextSize=26,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6,
         })
-        spawn(function()
+        task.spawn(function()
             local angle=0
             RunService.Heartbeat:Connect(function(dt)
                 if not HeroTitle or not HeroTitle.Parent then return end
@@ -1741,7 +1719,6 @@ function ACTED:CreateWindow(config)
             Font=Enum.Font.GothamBold,TextSize=11,ZIndex=7,
         })
 
-        -- ── SOCIAL BUTTONS ─────────────────────────────────
         if cfg.youtube or cfg.discord then
             local hasBoth  = cfg.youtube and cfg.discord
             local SocialRow = Create("Frame", {
@@ -1769,13 +1746,12 @@ function ACTED:CreateWindow(config)
                 AddCorner(Btn, 9)
                 local bStroke = AddStroke(Btn, accentCol, 1.3, 0.25)
 
-                -- FIX: ClipsDescendants on icon frame so image stays inside
                 local IconFrame = Create("Frame", {
                     Parent=Btn,
                     Size=UDim2.new(0,24,0,24),
                     Position=UDim2.new(0,10,0.5,-12),
                     BackgroundTransparency=1,
-                    ClipsDescendants=true,  -- FIX
+                    ClipsDescendants=true,
                     ZIndex=5,
                 })
                 local IconImg = Create("ImageLabel", {
@@ -1836,7 +1812,6 @@ function ACTED:CreateWindow(config)
             end
         end
 
-        -- ── TEAM / DEVELOPERS ─────────────────────────────────
         local devs = cfg.devs or {{name="occult",role="Lead Developer"}}
         if #devs > 0 then
             local DevHeader = Create("Frame", {
@@ -1871,7 +1846,7 @@ function ACTED:CreateWindow(config)
                     BackgroundColor3=Theme.Accent, ZIndex=4,
                 })
                 AddCorner(LeftBar,2)
-                spawn(function()
+                task.spawn(function()
                     local ph=math.random()*math.pi*2
                     RunService.Heartbeat:Connect(function(dt)
                         if not LeftBar or not LeftBar.Parent then return end
@@ -1880,13 +1855,12 @@ function ACTED:CreateWindow(config)
                     end)
                 end)
 
-                -- FIX: ClipsDescendants so avatar image is clipped to the circle
                 local AvatarFrame = Create("Frame", {
                     Parent=DevCard,
                     Size=UDim2.new(0,40,0,40),
                     Position=UDim2.new(0,12,0.5,-20),
                     BackgroundColor3=Theme.SurfaceAlt,
-                    ClipsDescendants=true,  -- FIX
+                    ClipsDescendants=true,
                     ZIndex=4,
                 })
                 AddCorner(AvatarFrame, 999)
@@ -1962,7 +1936,6 @@ function ACTED:CreateWindow(config)
             end
         end
 
-        -- ── STATS ROW ─────────────────────────────────────────
         local statsData = cfg.stats or {
             {label="Version", value=cfg.version or "v3.1"},
             {label="Components", value="9"},
@@ -2002,7 +1975,6 @@ function ACTED:CreateWindow(config)
             })
         end
 
-        -- ── FOOTER ────────────────────────────────────────────
         local Footer = Create("Frame", {
             Parent=Page, Size=UDim2.new(1,-4,0,28),
             BackgroundColor3=Theme.Surface, ZIndex=3,
@@ -2015,7 +1987,7 @@ function ACTED:CreateWindow(config)
             Text="made with ACTED  •  "..(cfg.discord and cfg.discord.url or "discord.gg/acted"),
             TextColor3=Theme.TextDim, Font=Enum.Font.GothamMedium, TextSize=10, ZIndex=4,
         })
-        spawn(function()
+        task.spawn(function()
             local ph=0
             RunService.Heartbeat:Connect(function(dt)
                 if not FooterLabel or not FooterLabel.Parent then return end
@@ -2025,11 +1997,8 @@ function ACTED:CreateWindow(config)
         end)
 
         return tabData
-    end  -- CreateCreditsTab
+    end
 
-    -- ============================================================
-    -- NOTIFICATIONS
-    -- ============================================================
     function Window:Notify(title, message, ntype, duration)
         ntype=ntype or "info"; duration=duration or 3
         local colors={info=Theme.Accent,success=Theme.Success,warning=Theme.Warning,error=Theme.Danger}
@@ -2093,10 +2062,7 @@ function ACTED:CreateWindow(config)
         local failedCount = 0
         for _ in pairs(AssetLoader._failed) do failedCount = failedCount + 1 end
         if failedCount > 0 then
-            Window:Notify("Assets", failedCount.." image(s) failed to load — check console (F9) for the broken URLs.", "warning", 5)
-            for url in pairs(AssetLoader._failed) do
-                warn("[ACTED] Broken asset URL: " .. url)
-            end
+            Window:Notify("Assets", failedCount.." image(s) failed to load — fallback textures used.", "warning", 5)
         end
     end)
 
