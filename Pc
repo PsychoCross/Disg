@@ -4,7 +4,8 @@
 -- ██║  ██║██║╚════██║██║   ██║██║   ██║██║╚════██║██╔══╝  ██║  ██║
 -- ██████╔╝██║███████║╚██████╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
--- Version: 2.9 | Fixes: Renamed Settings→Configs, Removed Close Btn, Credits Tab WOW, Suggestions
+-- Version: 3.0 | Adăugat: AssetLoader (GitHub→local, fără rbxassetid),
+--                Credits tab ÉPIC (YouTube+Discord), tab icons descărcate
 
 local ACTED = {}
 ACTED.__index = ACTED
@@ -15,8 +16,144 @@ local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
 local CoreGui          = game:GetService("CoreGui")
+local HttpService      = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
+
+-- ============================================================
+-- ⚙ CONFIGUREAZĂ AICI link-urile tale GitHub (raw.githubusercontent.com)
+-- Pune-le în propriul tău repo, apoi copiază link-ul "Raw" al fiecărui fișier.
+-- Exemplu link valid: https://raw.githubusercontent.com/userul-tau/repo/main/logo.png
+-- ============================================================
+local ASSET_URLS = {
+    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Logo.png",
+    -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
+    -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
+    Tabs = {
+        Main      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Main",
+        Combat    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Combat",
+        Rage      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Rage",
+        Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Movement",
+        Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Visual",
+        Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport",
+        Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Config",
+        Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Credit",
+    },
+    -- Avataruri custom pentru Credits (cheia = numele dev-ului exact cum apare în devs[].name)
+    Avatars = {
+        -- occult = "https://raw.githubusercontent.com/PsychoCross/Disg/main/avatars/occult.png",
+    },
+}
+
+-- ============================================================
+-- 🧩 ASSET LOADER
+-- Descarcă o imagine de pe GitHub (HttpGet), o salvează local (writefile),
+-- și o convertește într-un asset utilizabil de Roblox (getcustomasset),
+-- FĂRĂ să fie nevoie să o uploadezi manual pe Roblox ca rbxassetid.
+-- Funcționează pe executoare care suportă HttpGet + writefile + getcustomasset
+-- (Delta, Synapse X, Script-Ware etc.). Dacă executorul nu suportă una din
+-- funcții, se face fallback automat la un placeholder rbxassetid.
+-- ============================================================
+local FALLBACK_IMAGE = "rbxassetid://131583568098851" -- folosit dacă descărcarea eșuează
+
+local AssetLoader = {}
+AssetLoader._cache = {} -- url -> rbxasset://... (cache în memorie, nu redescarcă de 2 ori pe sesiune)
+
+local ASSET_FOLDER = "ACTED/assets"
+
+local function EnsureAssetFolder()
+    pcall(function()
+        if not isfolder("ACTED") then makefolder("ACTED") end
+        if not isfolder(ASSET_FOLDER) then makefolder(ASSET_FOLDER) end
+    end)
+end
+
+local function UrlToFileName(url)
+    -- transformă URL-ul într-un nume de fișier sigur, păstrând extensia
+    local ext = url:match("%.([%a%d]+)$") or "png"
+    local hash = 0
+    for i = 1, #url do hash = (hash * 31 + url:byte(i)) % 2147483647 end
+    return ASSET_FOLDER .. "/" .. tostring(hash) .. "." .. ext
+end
+
+-- Verifică ce funcții sunt disponibile în executorul curent
+local SUPPORTS_CUSTOMASSET = typeof(getcustomasset) == "function"
+local SUPPORTS_HTTPGET     = typeof(game.HttpGet) == "function" or typeof(HttpGet) == "function"
+local SUPPORTS_FS          = typeof(writefile) == "function" and typeof(isfile) == "function"
+
+-- Funcție de download (sincronă, apelată din coroutine/task.spawn ca să nu îngheț UI-ul)
+local function DownloadTo(url, path)
+    local ok, data = pcall(function()
+        if game.HttpGet then
+            return game:HttpGet(url, true)
+        elseif HttpGet then
+            return HttpGet(url, true)
+        end
+        return nil
+    end)
+    if not ok or not data or #data == 0 then return false end
+    local ok2 = pcall(writefile, path, data)
+    return ok2
+end
+
+-- Returnează un Image valid IMEDIAT (placeholder), apoi apelează callback(realImage)
+-- când descărcarea s-a terminat. Așa nu blochezi construcția UI-ului.
+function AssetLoader.Get(url, callback)
+    if not url or url == "" then
+        if callback then callback(FALLBACK_IMAGE) end
+        return FALLBACK_IMAGE
+    end
+
+    if AssetLoader._cache[url] then
+        if callback then callback(AssetLoader._cache[url]) end
+        return AssetLoader._cache[url]
+    end
+
+    if not (SUPPORTS_HTTPGET and SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then
+        -- Executorul nu suportă asset loading custom -> fallback direct
+        AssetLoader._cache[url] = FALLBACK_IMAGE
+        if callback then callback(FALLBACK_IMAGE) end
+        return FALLBACK_IMAGE
+    end
+
+    EnsureAssetFolder()
+    local path = UrlToFileName(url)
+
+    task.spawn(function()
+        local finalImage = FALLBACK_IMAGE
+        local needsDownload = true
+        pcall(function() needsDownload = not isfile(path) end)
+
+        if needsDownload then
+            local success = DownloadTo(url, path)
+            if not success then
+                AssetLoader._cache[url] = FALLBACK_IMAGE
+                if callback then callback(FALLBACK_IMAGE) end
+                return
+            end
+        end
+
+        local ok, asset = pcall(getcustomasset, path)
+        if ok and asset then
+            finalImage = asset
+        end
+        AssetLoader._cache[url] = finalImage
+        if callback then callback(finalImage) end
+    end)
+
+    return FALLBACK_IMAGE -- placeholder instant, înlocuit de callback
+end
+
+-- Aplică direct pe un ImageLabel/ImageButton: setează placeholder, apoi swap cu fade
+function AssetLoader.Apply(imageObj, url)
+    if not imageObj then return end
+    AssetLoader.Get(url, function(realImage)
+        if not imageObj or not imageObj.Parent then return end
+        imageObj.ImageTransparency = 1
+        imageObj.Image = realImage
+        TweenService:Create(imageObj, TweenInfo.new(0.35), {ImageTransparency = 0}):Play()
+    end)
+end
 
 -- Theme Colors
 local Theme = {
@@ -37,6 +174,8 @@ local Theme = {
     SliderFill    = Color3.fromRGB(150, 70, 230),
     ToggleOn      = Color3.fromRGB(140, 60, 220),
     ToggleOff     = Color3.fromRGB(40, 30, 55),
+    YouTube       = Color3.fromRGB(255, 0, 0),
+    Discord       = Color3.fromRGB(88, 101, 242),
 }
 
 -- ============================================================
@@ -137,11 +276,10 @@ local _openDropdown = nil
 -- ============================================================
 -- Config management & Folder System
 -- ============================================================
--- CHANGED: "settings" → "configs" throughout
 local HUB_FOLDER    = "ACTED"
 local CONFIG_FOLDER = HUB_FOLDER .. "/configs"
 local META_FOLDER   = HUB_FOLDER .. "/meta"
-local META_FILE     = META_FOLDER .. "/ACTED_configs.json"      -- renamed from _settings
+local META_FILE     = META_FOLDER .. "/ACTED_configs.json"
 local AUTOLOAD_FILE = META_FOLDER .. "/ACTED_autoload.json"
 
 local function EnsureFolders()
@@ -161,7 +299,7 @@ local function ReadConfigList()
     local ok, raw = pcall(readfile, META_FILE)
     if not ok or not raw then return {} end
     local ok2, data = pcall(function()
-        return game:GetService("HttpService"):JSONDecode(raw)
+        return HttpService:JSONDecode(raw)
     end)
     if ok2 and type(data) == "table" then return data end
     return {}
@@ -170,7 +308,7 @@ end
 local function WriteConfigList(list)
     EnsureFolders()
     local ok, json = pcall(function()
-        return game:GetService("HttpService"):JSONEncode(list)
+        return HttpService:JSONEncode(list)
     end)
     if ok then pcall(writefile, META_FILE, json) end
 end
@@ -198,7 +336,7 @@ local function ReadAutoLoad()
     local ok, raw = pcall(readfile, AUTOLOAD_FILE)
     if not ok or not raw then return {enabled = false, config = nil} end
     local ok2, data = pcall(function()
-        return game:GetService("HttpService"):JSONDecode(raw)
+        return HttpService:JSONDecode(raw)
     end)
     if ok2 and type(data) == "table" then
         return {enabled = data.enabled == true, config = data.config}
@@ -209,7 +347,7 @@ end
 local function WriteAutoLoad(enabled, configName)
     EnsureFolders()
     local ok, json = pcall(function()
-        return game:GetService("HttpService"):JSONEncode({enabled = enabled, config = configName})
+        return HttpService:JSONEncode({enabled = enabled, config = configName})
     end)
     if ok then pcall(writefile, AUTOLOAD_FILE, json) end
 end
@@ -220,8 +358,9 @@ end
 function ACTED:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "ACTED"
-    local SubTitle = config.SubTitle or "v2.9 | occult"
+    local SubTitle = config.SubTitle or "v3.0 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
+    local LogoUrl  = config.LogoUrl  or ASSET_URLS.Logo
 
     local _configData = {}
     EnsureFolders()
@@ -316,11 +455,14 @@ function ACTED:CreateWindow(config)
     })
     AddCorner(LogoFrame, 10)
     local logoStroke = AddStroke(LogoFrame, Theme.Accent, 1.5)
-    Create("ImageLabel", {
+    local LogoImage = Create("ImageLabel", {
         Parent = LogoFrame, Size = UDim2.new(1, -4, 1, -4),
         Position = UDim2.new(0, 2, 0, 2), BackgroundTransparency = 1,
-        Image = "rbxassetid://131583568098851", ScaleType = Enum.ScaleType.Fit, ZIndex = 12,
+        Image = FALLBACK_IMAGE, ScaleType = Enum.ScaleType.Fit, ZIndex = 12,
     })
+    -- 🧩 Logo descărcat automat de pe GitHub (vezi ASSET_URLS.Logo de sus)
+    AssetLoader.Apply(LogoImage, LogoUrl)
+
     spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
@@ -362,8 +504,7 @@ function ACTED:CreateWindow(config)
         return btn
     end
 
-    -- CHANGED: Removed close (X) button entirely.
-    -- Only minimize button remains, now at -36 offset instead of -70.
+    -- Fără buton de close, doar minimize
     local minimized = false
     local originalSize = Size
     local MinBtn = MakeTopBtn(-36, "-", Theme.TextSecondary)
@@ -403,7 +544,7 @@ function ACTED:CreateWindow(config)
             data[el.key] = el.get()
         end
         local ok, json = pcall(function()
-            return game:GetService("HttpService"):JSONEncode(data)
+            return HttpService:JSONEncode(data)
         end)
         if ok then return json end
         return nil
@@ -411,7 +552,7 @@ function ACTED:CreateWindow(config)
 
     local function ApplyConfig(json)
         local ok, data = pcall(function()
-            return game:GetService("HttpService"):JSONDecode(json)
+            return HttpService:JSONDecode(json)
         end)
         if not ok or type(data) ~= "table" then return false end
         for _, el in ipairs(Window._elements) do
@@ -422,7 +563,6 @@ function ACTED:CreateWindow(config)
         return true
     end
 
-    -- CHANGED: terminology "setting" → "config" in all Save/Load/Delete functions
     function Window:SaveConfig(configName)
         EnsureFolders()
         configName = configName or "default"
@@ -589,21 +729,49 @@ function ACTED:CreateWindow(config)
         end
     end
 
+    -- 🧩 CreateTab acceptă acum icon ca:
+    --   nil                -> fără icon
+    --   "🔥" (emoji/text)  -> afișat ca text înaintea numelui (ca înainte)
+    --   "url:Cheie"        -> descarcă ASSET_URLS.Tabs[Cheie] de pe GitHub și-l pune ca imagine
+    --   "http://..."/"https://..." -> descarcă direct acel URL ca imagine
     function Window:CreateTab(name, icon)
         local tabData = {_sections = {}}
+
+        local iconIsImage = false
+        local iconUrl = nil
+        if type(icon) == "string" then
+            if icon:match("^url:") then
+                local key = icon:gsub("^url:", "")
+                iconUrl = ASSET_URLS.Tabs[key]
+                iconIsImage = iconUrl ~= nil
+            elseif icon:match("^https?://") then
+                iconUrl = icon
+                iconIsImage = true
+            end
+        end
 
         local TabBtn = Create("TextButton", {
             Parent = TabBar,
             Size   = UDim2.new(1, 0, 0, 36),
             BackgroundColor3 = Theme.SurfaceAlt,
             BackgroundTransparency = 0.4,
-            Text = (icon and icon .. " " or "") .. name,
+            Text = (iconIsImage and "      " .. name) or ((icon and not iconIsImage and icon .. " " or "") .. name),
             TextColor3 = Theme.TextSecondary,
             Font = Enum.Font.GothamSemibold, TextSize = 12,
             AutoButtonColor = false, ZIndex = 3,
         })
         AddCorner(TabBtn, 8)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
+
+        if iconIsImage then
+            local TabIcon = Create("ImageLabel", {
+                Parent = TabBtn, Size = UDim2.new(0, 18, 0, 18),
+                Position = UDim2.new(0, 8, 0.5, -9),
+                BackgroundTransparency = 1, Image = FALLBACK_IMAGE,
+                ScaleType = Enum.ScaleType.Fit, ZIndex = 4,
+            })
+            AssetLoader.Apply(TabIcon, iconUrl)
+        end
 
         local Page = Create("ScrollingFrame", {
             Parent = ContentHolder,
@@ -688,9 +856,6 @@ function ACTED:CreateWindow(config)
                 })
             end
 
-            -- ==========================
-            -- BUTTON
-            -- ==========================
             function Section:AddButton(label, callback)
                 callback = callback or function() end
                 local row = MakeRow(34)
@@ -733,9 +898,6 @@ function ACTED:CreateWindow(config)
                 return Btn
             end
 
-            -- ==========================
-            -- TOGGLE
-            -- ==========================
             function Section:AddToggle(label, default, callback, configKey)
                 callback = callback or function() end
                 local state = (default == true)
@@ -788,9 +950,6 @@ function ACTED:CreateWindow(config)
                 return obj
             end
 
-            -- ==========================
-            -- SLIDER
-            -- ==========================
             function Section:AddSlider(label, min, max, default, callback, decimals, configKey)
                 min      = min      or 0
                 max      = max      or 100
@@ -904,9 +1063,6 @@ function ACTED:CreateWindow(config)
                 return obj
             end
 
-            -- ==========================
-            -- TEXTBOX
-            -- ==========================
             function Section:AddTextbox(label, placeholder, default, callback, configKey)
                 callback = callback or function() end
                 local row = MakeRow(54)
@@ -953,9 +1109,6 @@ function ACTED:CreateWindow(config)
                 return obj
             end
 
-            -- ==========================
-            -- DROPDOWN
-            -- ==========================
             function Section:AddDropdown(label, options, default, callback, configKey)
                 callback = callback or function() end
                 options  = options  or {}
@@ -1126,9 +1279,6 @@ function ACTED:CreateWindow(config)
                 return ddObj
             end
 
-            -- ==========================
-            -- COLORPICKER
-            -- ==========================
             function Section:AddColorPicker(label, default, callback, configKey)
                 callback = callback or function() end
                 default  = default  or Color3.fromRGB(140, 60, 220)
@@ -1238,9 +1388,6 @@ function ACTED:CreateWindow(config)
                 return obj
             end
 
-            -- ==========================
-            -- LABEL
-            -- ==========================
             function Section:AddLabel(text, color)
                 local row = MakeRow(22)
                 Create("TextLabel", {
@@ -1253,9 +1400,6 @@ function ACTED:CreateWindow(config)
                 })
             end
 
-            -- ==========================
-            -- KEYBIND
-            -- ==========================
             function Section:AddKeybind(label, default, callback, configKey)
                 callback = callback or function() end
                 default  = default  or Enum.KeyCode.RightShift
@@ -1306,9 +1450,6 @@ function ACTED:CreateWindow(config)
                 return obj
             end
 
-            -- ==========================
-            -- DIVIDER
-            -- ==========================
             function Section:AddDivider()
                 local row = MakeRow(10)
                 Create("Frame", {
@@ -1326,13 +1467,14 @@ function ACTED:CreateWindow(config)
     end
 
     -- ============================================================
-    -- CREDITS TAB BUILDER  ✦ WOW EDITION ✦
-    -- Call this once: Window:CreateCreditsTab(config)
+    -- 🔥 CREDITS TAB — ÉPIC EDITION 🔥
     -- config = {
-    --   logo    = "rbxassetid://...",   (optional)
-    --   version = "v2.9",
+    --   name    = "ACTED",
+    --   version = "v3.0",
+    --   logo    = URL sau rbxassetid (opțional, altfel ASSET_URLS.Logo),
     --   devs    = { {name="occult", role="lead dev", discord="occult#0000"}, ... },
-    --   socials = { {label="Discord", url="..."}, ... },
+    --   youtube = {name = "Numele canalului", url = "https://youtube.com/@..."},
+    --   discord = {name = "Server Discord", url = "https://discord.gg/..."},
     -- }
     -- ============================================================
     function Window:CreateCreditsTab(cfg)
@@ -1392,28 +1534,28 @@ function ACTED:CreateWindow(config)
         tabData._stroke = tabStroke
         table.insert(Window._tabs, tabData)
 
-        -- ── HERO BANNER ──────────────────────────────────────────────
+        -- ── HERO BANNER (mai mare, mai épic) ──────────────────────
         local HeroBanner = Create("Frame", {
-            Parent = Page, Size = UDim2.new(1, -4, 0, 90),
+            Parent = Page, Size = UDim2.new(1, -4, 0, 110),
             BackgroundColor3 = Color3.fromRGB(10, 6, 18),
             ZIndex = 3, ClipsDescendants = true,
         })
-        AddCorner(HeroBanner, 12)
-        local heroStroke = AddStroke(HeroBanner, Theme.Accent, 1.5, 0.1)
-        PulseGlow(heroStroke, Theme.Border, Theme.AccentGlow, 0.8)
+        AddCorner(HeroBanner, 14)
+        local heroStroke = AddStroke(HeroBanner, Theme.Accent, 2, 0.05)
+        PulseGlow(heroStroke, Theme.Border, Theme.AccentGlow, 1.1)
 
-        -- Animated background aurora
+        -- Aurora animată (rotește + respiră)
         local Aurora = Create("Frame", {
-            Parent = HeroBanner, Size = UDim2.new(2, 0, 2, 0),
-            Position = UDim2.new(-0.5, 0, -0.5, 0),
-            BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.88, ZIndex = 3,
+            Parent = HeroBanner, Size = UDim2.new(2.2, 0, 2.2, 0),
+            Position = UDim2.new(-0.6, 0, -0.6, 0),
+            BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.85, ZIndex = 3,
         })
         AddCorner(Aurora, 999)
-        Create("UIGradient", {
+        local auroraGradient = Create("UIGradient", {
             Parent = Aurora, Rotation = 45,
             Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 30, 200)),
-                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(60, 10, 120)),
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(140, 30, 220)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 10, 140)),
                 ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 5, 50)),
             }),
         })
@@ -1421,84 +1563,94 @@ function ACTED:CreateWindow(config)
             local t = 0
             RunService.Heartbeat:Connect(function(dt)
                 if not Aurora or not Aurora.Parent then return end
-                t = t + dt * 0.4
-                local ox = math.sin(t) * 0.12
-                local oy = math.cos(t * 0.7) * 0.08
-                Aurora.Position = UDim2.new(-0.5 + ox, 0, -0.5 + oy, 0)
+                t = t + dt * 0.5
+                local ox = math.sin(t) * 0.15
+                local oy = math.cos(t * 0.7) * 0.1
+                Aurora.Position = UDim2.new(-0.6 + ox, 0, -0.6 + oy, 0)
+                auroraGradient.Rotation = auroraGradient.Rotation + dt * 8
             end)
         end)
 
-        -- Stars effect (tiny sparkles)
-        for i = 1, 18 do
+        -- Particule de sclipici care plutesc în sus
+        for i = 1, 22 do
             local star = Create("Frame", {
                 Parent = HeroBanner,
                 Size = UDim2.new(0, math.random(1, 3), 0, math.random(1, 3)),
-                Position = UDim2.new(math.random() * 0.95, 0, math.random() * 0.85, 0),
+                Position = UDim2.new(math.random() * 0.95, 0, math.random() * 0.9, 0),
                 BackgroundColor3 = Color3.fromRGB(200 + math.random(0,55), 160 + math.random(0,55), 255),
                 BackgroundTransparency = math.random(30, 70) / 100,
                 ZIndex = 4,
             })
             AddCorner(star, 999)
             spawn(function()
-                local speed = 0.8 + math.random() * 2
-                local phase = math.random() * math.pi * 2
-                local baseT = star.BackgroundTransparency
-                RunService.Heartbeat:Connect(function(dt)
-                    if not star or not star.Parent then return end
-                    phase = phase + dt * speed
-                    star.BackgroundTransparency = math.clamp(baseT + math.sin(phase) * 0.4, 0, 1)
-                end)
+                local speed = 0.5 + math.random() * 1.5
+                local startY = star.Position.Y.Scale
+                while star and star.Parent do
+                    local dur = 3 + math.random() * 3
+                    Tween(star, {Position = UDim2.new(star.Position.X.Scale, 0, startY - 0.3, 0), BackgroundTransparency = 1}, dur, Enum.EasingStyle.Sine)
+                    task.wait(dur)
+                    if star and star.Parent then
+                        star.Position = UDim2.new(math.random() * 0.95, 0, 0.95, 0)
+                        star.BackgroundTransparency = math.random(30, 70) / 100
+                        startY = 0.95
+                    end
+                end
             end)
         end
 
-        -- Logo image (optional)
-        if cfg.logo then
-            Create("ImageLabel", {
-                Parent = HeroBanner, Size = UDim2.new(0, 52, 0, 52),
-                Position = UDim2.new(0, 14, 0.5, -26),
-                BackgroundTransparency = 1, Image = cfg.logo,
-                ScaleType = Enum.ScaleType.Fit, ZIndex = 6,
-            })
-        end
+        -- Logo (descărcat automat de pe GitHub)
+        local logoUrl = cfg.logo or ASSET_URLS.Logo
+        local LogoRing = Create("Frame", {
+            Parent = HeroBanner, Size = UDim2.new(0, 64, 0, 64),
+            Position = UDim2.new(0, 12, 0.5, -32),
+            BackgroundColor3 = Theme.Background, ZIndex = 6,
+        })
+        AddCorner(LogoRing, 999)
+        local logoRingStroke = AddStroke(LogoRing, Theme.Accent, 2, 0)
+        PulseGlow(logoRingStroke, Theme.Accent, Theme.AccentGlow, 1.5)
+        local CreditsLogo = Create("ImageLabel", {
+            Parent = LogoRing, Size = UDim2.new(1, -8, 1, -8),
+            Position = UDim2.new(0, 4, 0, 4), BackgroundTransparency = 1,
+            Image = FALLBACK_IMAGE, ScaleType = Enum.ScaleType.Fit, ZIndex = 7,
+        })
+        AssetLoader.Apply(CreditsLogo, logoUrl)
 
-        -- Big Title with glow
+        -- Titlu mare cu sweep de culoare
         local HeroTitle = Create("TextLabel", {
             Parent = HeroBanner,
-            Position = cfg.logo and UDim2.new(0, 76, 0, 14) or UDim2.new(0, 16, 0, 14),
-            Size = UDim2.new(1, -90, 0, 32),
+            Position = UDim2.new(0, 88, 0, 18),
+            Size = UDim2.new(1, -100, 0, 36),
             BackgroundTransparency = 1,
             Text = cfg.name or "ACTED",
             TextColor3 = Theme.TextPrimary,
-            Font = Enum.Font.GothamBlack, TextSize = 26,
+            Font = Enum.Font.GothamBlack, TextSize = 28,
             TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
         })
-
-        -- Animated color shift on the title
         spawn(function()
             local angle = 0
             RunService.Heartbeat:Connect(function(dt)
                 if not HeroTitle or not HeroTitle.Parent then return end
-                angle = angle + dt * 40
+                angle = angle + dt * 50
                 local t = (math.sin(math.rad(angle)) + 1) / 2
-                HeroTitle.TextColor3 = Theme.TextPrimary:Lerp(Theme.AccentGlow, t * 0.35)
+                HeroTitle.TextColor3 = Theme.TextPrimary:Lerp(Theme.AccentGlow, t * 0.45)
             end)
         end)
 
         Create("TextLabel", {
             Parent = HeroBanner,
-            Position = cfg.logo and UDim2.new(0, 76, 0, 48) or UDim2.new(0, 16, 0, 48),
-            Size = UDim2.new(1, -90, 0, 20),
+            Position = UDim2.new(0, 88, 0, 56),
+            Size = UDim2.new(1, -100, 0, 20),
             BackgroundTransparency = 1,
-            Text = (cfg.version or "v2.9") .. "  •  occult library",
+            Text = (cfg.version or "v3.0") .. "  •  occult library",
             TextColor3 = Theme.TextSecondary,
-            Font = Enum.Font.GothamMedium, TextSize = 11,
+            Font = Enum.Font.GothamMedium, TextSize = 12,
             TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 6,
         })
 
-        -- Version badge (top-right)
+        -- Badge versiune (colț dreapta-sus, rotativ)
         local VerBadge = Create("Frame", {
-            Parent = HeroBanner, Size = UDim2.new(0, 52, 0, 20),
-            Position = UDim2.new(1, -60, 0, 10),
+            Parent = HeroBanner, Size = UDim2.new(0, 58, 0, 22),
+            Position = UDim2.new(1, -66, 0, 12),
             BackgroundColor3 = Theme.Accent, ZIndex = 6,
         })
         AddCorner(VerBadge, 6)
@@ -1511,10 +1663,63 @@ function ACTED:CreateWindow(config)
         })
         Create("TextLabel", {
             Parent = VerBadge, Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1, Text = cfg.version or "v2.9",
+            BackgroundTransparency = 1, Text = cfg.version or "v3.0",
             TextColor3 = Color3.fromRGB(255, 255, 255),
-            Font = Enum.Font.GothamBold, TextSize = 10, ZIndex = 7,
+            Font = Enum.Font.GothamBold, TextSize = 11, ZIndex = 7,
         })
+
+        -- ── SOCIAL BAR: YouTube + Discord (link-uri reale, click = copy) ──
+        if cfg.youtube or cfg.discord then
+            local SocialRow = Create("Frame", {
+                Parent = Page, Size = UDim2.new(1, -4, 0, 40),
+                BackgroundTransparency = 1, ZIndex = 3,
+            })
+            Create("UIListLayout", {
+                Parent = SocialRow, FillDirection = Enum.FillDirection.Horizontal,
+                Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder,
+            })
+
+            local function MakeSocialBtn(label, icon, color, url, parent, widthScale)
+                local Btn = Create("TextButton", {
+                    Parent = parent, Size = UDim2.new(widthScale, -4, 1, 0),
+                    BackgroundColor3 = Theme.Surface, AutoButtonColor = false,
+                    Text = "", ZIndex = 4,
+                })
+                AddCorner(Btn, 9)
+                local bStroke = AddStroke(Btn, color, 1.3, 0.2)
+                Create("TextLabel", {
+                    Parent = Btn, Position = UDim2.new(0, 12, 0, 0), Size = UDim2.new(0, 24, 1, 0),
+                    BackgroundTransparency = 1, Text = icon, TextColor3 = color,
+                    Font = Enum.Font.GothamBlack, TextSize = 16, ZIndex = 5,
+                })
+                Create("TextLabel", {
+                    Parent = Btn, Position = UDim2.new(0, 40, 0, 0), Size = UDim2.new(1, -48, 1, 0),
+                    BackgroundTransparency = 1, Text = label, TextColor3 = Theme.TextPrimary,
+                    Font = Enum.Font.GothamSemibold, TextSize = 12,
+                    TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 5,
+                })
+                Btn.MouseEnter:Connect(function()
+                    Tween(Btn, {BackgroundColor3 = Theme.SurfaceAlt}, 0.15)
+                    Tween(bStroke, {Transparency = 0}, 0.15)
+                end)
+                Btn.MouseLeave:Connect(function()
+                    Tween(Btn, {BackgroundColor3 = Theme.Surface}, 0.15)
+                    Tween(bStroke, {Transparency = 0.2}, 0.15)
+                end)
+                Btn.MouseButton1Click:Connect(function()
+                    pcall(function() setclipboard(url) end)
+                    Window:Notify(label, "Link copiat în clipboard:\n" .. url, "success", 4)
+                end)
+                return Btn
+            end
+
+            if cfg.youtube then
+                MakeSocialBtn(cfg.youtube.name or "YouTube", "▶", Theme.YouTube, cfg.youtube.url or "", SocialRow, cfg.discord and 0.5 or 1)
+            end
+            if cfg.discord then
+                MakeSocialBtn(cfg.discord.name or "Discord", "◆", Theme.Discord, cfg.discord.url or "", SocialRow, cfg.youtube and 0.5 or 1)
+            end
+        end
 
         -- ── DEVELOPERS SECTION ───────────────────────────────────────
         local devs = cfg.devs or {{name = "occult", role = "Lead Developer"}}
@@ -1524,12 +1729,12 @@ function ACTED:CreateWindow(config)
                 Parent = Page, Size = UDim2.new(1, -4, 0, 20),
                 BackgroundTransparency = 1, ZIndex = 3,
             })
-            Create("Frame", {
+            local headerBar = Create("Frame", {
                 Parent = DevHeader, Size = UDim2.new(0, 3, 0, 14),
                 Position = UDim2.new(0, 0, 0.15, 0),
                 BackgroundColor3 = Theme.Accent, ZIndex = 4,
             })
-            AddCorner(DevHeader:FindFirstChildWhichIsA("Frame"), 2)
+            AddCorner(headerBar, 2)
             Create("TextLabel", {
                 Parent = DevHeader, Position = UDim2.new(0, 10, 0, 0),
                 Size = UDim2.new(1, -10, 1, 0),
@@ -1546,7 +1751,6 @@ function ACTED:CreateWindow(config)
                 AddCorner(DevCard, 10)
                 local cStroke = AddStroke(DevCard, Theme.Border, 1.2, 0.4)
 
-                -- Animated left bar
                 local LeftBar = Create("Frame", {
                     Parent = DevCard, Size = UDim2.new(0, 3, 0.7, 0),
                     Position = UDim2.new(0, 0, 0.15, 0),
@@ -1562,7 +1766,8 @@ function ACTED:CreateWindow(config)
                     end)
                 end)
 
-                -- Avatar circle
+                -- Avatar: dacă există URL custom în ASSET_URLS.Avatars[dev.name], îl descarcă;
+                -- altfel afișează inițiala numelui (ca înainte)
                 local AvatarFrame = Create("Frame", {
                     Parent = DevCard, Size = UDim2.new(0, 38, 0, 38),
                     Position = UDim2.new(0, 14, 0.5, -19),
@@ -1570,14 +1775,25 @@ function ACTED:CreateWindow(config)
                 })
                 AddCorner(AvatarFrame, 999)
                 AddStroke(AvatarFrame, Theme.Accent, 1.5, 0.2)
-                Create("TextLabel", {
-                    Parent = AvatarFrame, Size = UDim2.new(1, 0, 1, 0),
-                    BackgroundTransparency = 1,
-                    Text = (dev.name or "?"):sub(1,1):upper(),
-                    TextColor3 = Theme.AccentGlow, Font = Enum.Font.GothamBlack, TextSize = 16, ZIndex = 5,
-                })
 
-                -- Name + role
+                local avatarUrl = dev.avatar or ASSET_URLS.Avatars[dev.name or ""]
+                if avatarUrl then
+                    local AvatarImg = Create("ImageLabel", {
+                        Parent = AvatarFrame, Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1, Image = FALLBACK_IMAGE,
+                        ScaleType = Enum.ScaleType.Fit, ZIndex = 5,
+                    })
+                    AddCorner(AvatarImg, 999)
+                    AssetLoader.Apply(AvatarImg, avatarUrl)
+                else
+                    Create("TextLabel", {
+                        Parent = AvatarFrame, Size = UDim2.new(1, 0, 1, 0),
+                        BackgroundTransparency = 1,
+                        Text = (dev.name or "?"):sub(1,1):upper(),
+                        TextColor3 = Theme.AccentGlow, Font = Enum.Font.GothamBlack, TextSize = 16, ZIndex = 5,
+                    })
+                end
+
                 Create("TextLabel", {
                     Parent = DevCard, Position = UDim2.new(0, 62, 0, 10),
                     Size = UDim2.new(1, -80, 0, 20),
@@ -1593,7 +1809,6 @@ function ACTED:CreateWindow(config)
                     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4,
                 })
 
-                -- Hover glow effect
                 DevCard.MouseEnter:Connect(function()
                     Tween(DevCard, {BackgroundColor3 = Theme.SurfaceAlt}, 0.15)
                     Tween(cStroke, {Color = Theme.Accent, Transparency = 0}, 0.15)
@@ -1603,12 +1818,11 @@ function ACTED:CreateWindow(config)
                     Tween(cStroke, {Color = Theme.Border, Transparency = 0.4}, 0.15)
                 end)
 
-                -- Discord badge (if provided)
                 if dev.discord then
                     local DiscBadge = Create("TextButton", {
                         Parent = DevCard, Position = UDim2.new(1, -78, 0.5, -11),
                         Size = UDim2.new(0, 68, 0, 22),
-                        BackgroundColor3 = Color3.fromRGB(88, 101, 242),
+                        BackgroundColor3 = Theme.Discord,
                         Text = "discord", Font = Enum.Font.GothamSemibold, TextSize = 10,
                         TextColor3 = Color3.fromRGB(255, 255, 255),
                         AutoButtonColor = false, ZIndex = 5,
@@ -1618,10 +1832,11 @@ function ACTED:CreateWindow(config)
                         Tween(DiscBadge, {BackgroundColor3 = Color3.fromRGB(110, 125, 255)}, 0.12)
                     end)
                     DiscBadge.MouseLeave:Connect(function()
-                        Tween(DiscBadge, {BackgroundColor3 = Color3.fromRGB(88, 101, 242)}, 0.12)
+                        Tween(DiscBadge, {BackgroundColor3 = Theme.Discord}, 0.12)
                     end)
                     DiscBadge.MouseButton1Click:Connect(function()
-                        Window:Notify("Discord", dev.discord, "info", 4)
+                        pcall(function() setclipboard(dev.discord) end)
+                        Window:Notify("Discord", dev.discord .. "\n(copiat în clipboard)", "info", 4)
                     end)
                 end
             end
@@ -1629,7 +1844,7 @@ function ACTED:CreateWindow(config)
 
         -- ── STATS ROW ────────────────────────────────────────────────
         local statsData = cfg.stats or {
-            {label = "Version", value = cfg.version or "v2.9"},
+            {label = "Version", value = cfg.version or "v3.0"},
             {label = "Components", value = "9"},
             {label = "Status", value = "Active"},
         }
@@ -1668,20 +1883,19 @@ function ACTED:CreateWindow(config)
         })
         AddCorner(Footer, 8)
         AddStroke(Footer, Theme.Border, 1, 0.6)
-        Create("TextLabel", {
+        local FooterLabel = Create("TextLabel", {
             Parent = Footer, Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
-            Text = "✦  made with ACTED  •  discord.gg/acted  ✦",
+            Text = "✦  made with ACTED  •  " .. (cfg.discord and cfg.discord.url or "discord.gg/acted") .. "  ✦",
             TextColor3 = Theme.TextDim, Font = Enum.Font.GothamMedium, TextSize = 10, ZIndex = 4,
         })
-        -- Animated shimmer on footer text
         spawn(function()
             local ph = 0
             RunService.Heartbeat:Connect(function(dt)
-                if not Footer or not Footer.Parent then return end
+                if not FooterLabel or not FooterLabel.Parent then return end
                 ph = ph + dt * 0.9
                 local t = (math.sin(ph) + 1) / 2
-                Footer:FindFirstChildWhichIsA("TextLabel").TextColor3 = Theme.TextDim:Lerp(Theme.Accent, t * 0.5)
+                FooterLabel.TextColor3 = Theme.TextDim:Lerp(Theme.Accent, t * 0.5)
             end)
         end)
 
@@ -1818,3 +2032,38 @@ function ACTED:CreateWindow(config)
 end
 
 return ACTED
+
+--[[
+============================================================
+📌 EXEMPLU DE FOLOSIRE (NU face parte din librărie, e doar ghid)
+============================================================
+
+local ACTED = loadstring(game:HttpGet("URL_CATRE_ACTED.lua_PE_RAW_GITHUB"))()
+
+local Window = ACTED:CreateWindow({
+    Title = "Disg",
+    SubTitle = "v3.0 | by PsychoCross",
+})
+
+local MainTab     = Window:CreateTab("Main",     "url:Main")
+local CombatTab   = Window:CreateTab("Combat",   "url:Combat")
+local RageTab     = Window:CreateTab("Rage",     "url:Rage")
+local MovementTab = Window:CreateTab("Movement", "url:Movement")
+local VisualTab   = Window:CreateTab("Visual",   "url:Visual")
+local TeleportTab = Window:CreateTab("Teleport", "url:Teleport")
+local ConfigTab   = Window:CreateTab("Config",   "url:Config")
+
+local ConfigSection = ConfigTab:CreateSection("Configs")
+Window:AddConfigManager(ConfigSection)
+
+Window:CreateCreditsTab({
+    name    = "Disg",
+    version = "v3.0",
+    devs    = {
+        {name = "PsychoCross", role = "Lead Developer", discord = "psychocross"},
+    },
+    youtube = {name = "Disg YouTube", url = "https://youtube.com/@PUNE_LINKUL_TAU"},
+    discord = {name = "Disg Discord", url = "https://discord.gg/PUNE_INVITE_TAU"},
+})
+============================================================
+]]--
