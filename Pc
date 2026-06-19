@@ -49,10 +49,25 @@ local ASSET_URLS = {
     },
 }
 
+-- Recursively collects every URL string inside a (possibly nested) table.
+-- Used to know the full asset list up-front, before anything is requested.
+local function CollectAssetUrls(t, out)
+    out = out or {}
+    for _, v in pairs(t) do
+        if type(v) == "table" then
+            CollectAssetUrls(v, out)
+        elseif type(v) == "string" and v ~= "" then
+            table.insert(out, v)
+        end
+    end
+    return out
+end
+
 -- Tab icon base size and per-tab scale multipliers
-local TAB_ICON_SIZE  = 22
+local TAB_ICON_SIZE  = 26
 local TAB_ICON_SCALE = {
-    -- Combat = 1.2,
+    Combat = 1.35,
+    Credit = 1.35,
 }
 
 -- ============================================================
@@ -64,9 +79,10 @@ local TAB_ICON_SCALE = {
 local FALLBACK_IMAGE = "rbxassetid://131583568098851"
 
 local AssetLoader = {}
-AssetLoader._cache  = {}  -- url -> final image string
-AssetLoader._total  = 0   -- how many unique loads have been requested
-AssetLoader._loaded = 0   -- how many have finished (success or fail)
+AssetLoader._cache   = {}  -- url -> final image string
+AssetLoader._pending = {}  -- url -> list of callbacks waiting on an in-flight download
+AssetLoader._total   = 0   -- how many unique loads have been requested
+AssetLoader._loaded  = 0   -- how many have finished (success or fail)
 
 local ASSET_FOLDER = "ACTED/assets"
 
@@ -84,6 +100,26 @@ local function UrlToFileName(url)
     return ASSET_FOLDER .. "/" .. tostring(hash) .. "." .. ext
 end
 
+-- Recognised binary image signatures. Anything else (an HTML error page,
+-- GitHub's plain-text "404: Not Found" response, an empty/truncated body)
+-- gets rejected instead of being saved as if it were a real image — this
+-- is what was silently corrupting the icon cache before.
+local IMAGE_SIGNATURES = {
+    "\137PNG",      -- PNG
+    "\255\216\255", -- JPEG
+    "GIF87a",        -- GIF
+    "GIF89a",        -- GIF
+    "BM",            -- BMP
+}
+
+local function IsValidImageData(data)
+    if not data or #data < 8 then return false end
+    for _, sig in ipairs(IMAGE_SIGNATURES) do
+        if data:sub(1, #sig) == sig then return true end
+    end
+    return false
+end
+
 local SUPPORTS_CUSTOMASSET = typeof(getcustomasset) == "function"
 local SUPPORTS_HTTPGET     = typeof(game.HttpGet) == "function" or typeof(HttpGet) == "function"
 local SUPPORTS_FS          = typeof(writefile) == "function" and typeof(isfile) == "function"
@@ -95,20 +131,37 @@ local function DownloadTo(url, path)
         return nil
     end)
     if not ok or not data or #data == 0 then
-        warn("[ACTED] Download failed: " .. tostring(url))
+        warn("[ACTED] Download failed (no response): " .. tostring(url))
         return false
     end
-    -- If GitHub returned an HTML page instead of an image (wrong URL / 404)
-    if data:sub(1, 20):find("<!DOCTYPE") or data:sub(1, 20):find("<html") then
-        warn("[ACTED] URL returned HTML (not an image). Check if it's a raw link: " .. url)
+    if not IsValidImageData(data) then
+        warn("[ACTED] URL did not return a valid image (likely 404 / wrong raw link): " .. url)
         return false
     end
     local ok2 = pcall(writefile, path, data)
+    if not ok2 then warn("[ACTED] Could not write asset to disk: " .. path) end
     return ok2
+end
+
+-- A file on disk might be a corrupted leftover from a previous failed
+-- download (e.g. an old version of this script saved a "404" page as if
+-- it were a .png). Validate before trusting the cache, and wipe it if bad
+-- so it gets re-downloaded properly.
+local function IsCachedFileValid(path)
+    local ok, data = pcall(readfile, path)
+    if not ok or not IsValidImageData(data) then
+        pcall(function() if typeof(delfile) == "function" then delfile(path) end end)
+        return false
+    end
+    return true
 end
 
 -- Returns a placeholder immediately; calls callback(realImage) when ready.
 -- Tracks _total / _loaded so the loading screen can show progress.
+-- Concurrent calls for the same URL are merged into one download instead
+-- of racing each other to write the same file (this used to corrupt the
+-- logo, which was requested twice at once — once by the loading screen,
+-- once by the top bar).
 function AssetLoader.Get(url, callback)
     if not url or url == "" then
         if callback then callback(FALLBACK_IMAGE) end
@@ -121,13 +174,23 @@ function AssetLoader.Get(url, callback)
         return AssetLoader._cache[url]
     end
 
+    -- Already downloading — attach this callback instead of starting a
+    -- duplicate, racing download.
+    if AssetLoader._pending[url] then
+        if callback then table.insert(AssetLoader._pending[url], callback) end
+        return FALLBACK_IMAGE
+    end
+    AssetLoader._pending[url] = callback and {callback} or {}
+
     -- Count this as a pending load
     AssetLoader._total = AssetLoader._total + 1
 
     local function Finish(result)
         AssetLoader._cache[url] = result
         AssetLoader._loaded     = AssetLoader._loaded + 1
-        if callback then callback(result) end
+        local cbs = AssetLoader._pending[url] or {}
+        AssetLoader._pending[url] = nil
+        for _, cb in ipairs(cbs) do pcall(cb, result) end
     end
 
     if not (SUPPORTS_HTTPGET and SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then
@@ -140,9 +203,12 @@ function AssetLoader.Get(url, callback)
     local path = UrlToFileName(url)
 
     task.spawn(function()
-        -- Use cached file on disk if it exists
+        -- Use cached file on disk if it exists AND is a valid image
         local needsDownload = true
         pcall(function() needsDownload = not isfile(path) end)
+        if not needsDownload and not IsCachedFileValid(path) then
+            needsDownload = true
+        end
 
         if needsDownload then
             local ok = DownloadTo(url, path)
@@ -154,6 +220,29 @@ function AssetLoader.Get(url, callback)
     end)
 
     return FALLBACK_IMAGE
+end
+
+-- Pure disk check (no network calls) — true only if every URL already has
+-- a valid cached file. Used to skip the download animation entirely when
+-- the player has already downloaded everything before.
+function AssetLoader.AllCached(urls)
+    if not (SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then return false end
+    for _, url in ipairs(urls) do
+        if url and url ~= "" then
+            local path, exists = UrlToFileName(url), false
+            pcall(function() exists = isfile(path) end)
+            if not exists or not IsCachedFileValid(path) then return false end
+        end
+    end
+    return true
+end
+
+-- Kicks off (or attaches to) a download for every URL up-front, so that
+-- AssetLoader._total reflects the real workload before the loading
+-- screen starts polling progress — this is what previously let the
+-- loading screen vanish before tab icons had even been requested.
+function AssetLoader.PrefetchAll(urls)
+    for _, url in ipairs(urls) do AssetLoader.Get(url) end
 end
 
 -- Convenience: set Image on an ImageLabel and fade it in when ready
@@ -345,7 +434,9 @@ end
 -- ============================================================
 -- ANIMATED LOADING SCREEN
 -- ============================================================
-local function CreateLoadingScreen(screenGui)
+local function CreateLoadingScreen(screenGui, opts)
+    opts = opts or {}
+    local onComplete = opts.onComplete
     -- Uses a separate ScreenGui so it sits on top of everything
     local LoadGui = Create("ScreenGui", {
         Name           = "ACTED_LoadingScreen",
@@ -413,16 +504,19 @@ local function CreateLoadingScreen(screenGui)
     })
 
     -- Center card
+    local CardFinalSize = UDim2.new(0, 300, 0, 210)
     local Card = Create("Frame", {
         Parent           = Bg,
-        Size             = UDim2.new(0, 300, 0, 210),
+        Size             = UDim2.new(0, 240, 0, 168),
         Position         = UDim2.new(0.5, -150, 0.5, -105),
         BackgroundColor3 = Theme.Surface,
+        BackgroundTransparency = 1,
         ZIndex           = 5,
     })
     AddCorner(Card, 18)
     local cardStroke = AddStroke(Card, Theme.Accent, 2, 0.1)
     PulseGlow(cardStroke, Theme.Border, Theme.AccentGlow, 1.4)
+    Tween(Card, {Size = CardFinalSize, BackgroundTransparency = 0}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
     -- Subtle card gradient
     Create("UIGradient", {
@@ -574,6 +668,7 @@ local function CreateLoadingScreen(screenGui)
     local function Dismiss()
         if dismissed then return end
         dismissed = true
+        if onComplete then pcall(onComplete) end
         -- Animate out: card slides up, overlay fades
         Tween(Card, {Position = UDim2.new(0.5,-150,0.4,-105), BackgroundTransparency = 1}, 0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         Tween(Bg,   {BackgroundTransparency = 1}, 0.65, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
@@ -591,7 +686,7 @@ local function CreateLoadingScreen(screenGui)
 
     -- Progress update loop
     spawn(function()
-        local timeout = 10  -- max wait in seconds
+        local timeout = 25  -- max wait in seconds (covers a full first-time download of all assets)
         local elapsed = 0
         while not dismissed do
             task.wait(0.05)
@@ -610,9 +705,11 @@ local function CreateLoadingScreen(screenGui)
             end
             Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
 
-            -- Dismiss when all loaded or timed out
+            -- Dismiss when all loaded or timed out (or there was simply
+            -- nothing to load, e.g. no assets configured)
             local allDone = (total > 0 and loaded >= total)
-            if allDone or elapsed >= timeout then
+            local nothingToLoad = (total == 0 and elapsed >= 1.5)
+            if allDone or nothingToLoad or elapsed >= timeout then
                 -- If all done, show 100% briefly before dismissing
                 if allDone then
                     Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
@@ -641,6 +738,16 @@ function ACTED:CreateWindow(config)
     local _configData = {}
     EnsureFolders()
 
+    -- Gather every known asset URL (logo, tab icons, social icons, avatars)
+    -- and kick off their downloads immediately. Doing this before the
+    -- loading screen is created means its progress bar reflects the real
+    -- total from the very first frame, instead of growing piecemeal as
+    -- tabs get created later (which used to let it close itself early).
+    local AllKnownAssets = CollectAssetUrls(ASSET_URLS)
+    if LogoUrl ~= ASSET_URLS.Logo then table.insert(AllKnownAssets, LogoUrl) end
+    local AssetsAlreadyCached = AssetLoader.AllCached(AllKnownAssets)
+    AssetLoader.PrefetchAll(AllKnownAssets)
+
     -- Main ScreenGui
     local ScreenGui = Create("ScreenGui", {
         Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
@@ -653,11 +760,13 @@ function ACTED:CreateWindow(config)
         ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     end
 
-    -- Background blur
+    -- Background blur (animated in once the hub is actually revealed)
     local blur = Create("BlurEffect", {Parent = game:GetService("Lighting"), Size = 0})
-    Tween(blur, {Size = 4}, 0.5)
 
     -- ── Main window frame ────────────────────────────────────
+    -- Stays hidden (zero size, fully transparent) until assets are ready —
+    -- either revealed instantly (everything already cached) or once the
+    -- loading screen finishes downloading.
     local Main = Create("Frame", {
         Name             = "Main",
         Parent           = ScreenGui,
@@ -670,7 +779,14 @@ function ACTED:CreateWindow(config)
     AddCorner(Main, 14)
     local mainStroke = AddStroke(Main, Theme.Border, 1.5)
     PulseGlow(mainStroke, Theme.Border, Theme.BorderGlow, 1.2)
-    Tween(Main, {Size = Size, BackgroundTransparency = 0}, 0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+
+    local _mainRevealed = false
+    local function RevealMain()
+        if _mainRevealed then return end
+        _mainRevealed = true
+        Tween(blur, {Size = 4}, 0.5)
+        Tween(Main, {Size = Size, BackgroundTransparency = 0}, 0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    end
 
     -- Gradient overlay
     local Gradient = Create("Frame", {
@@ -796,9 +912,13 @@ function ACTED:CreateWindow(config)
     Window._activeTab = nil
     Window._elements  = {}
 
-    -- Start loading screen (it dismisses itself automatically)
-    if ShowLoadingScreen then
-        CreateLoadingScreen(ScreenGui)
+    -- Start loading screen — but only if there's actually something to
+    -- download. If every asset is already cached on disk from a previous
+    -- run, skip the animation entirely and show the hub right away.
+    if ShowLoadingScreen and not AssetsAlreadyCached then
+        CreateLoadingScreen(ScreenGui, {onComplete = RevealMain})
+    else
+        RevealMain()
     end
 
     -- Config serialization helpers
