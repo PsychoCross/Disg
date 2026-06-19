@@ -26,11 +26,11 @@ local LocalPlayer = Players.LocalPlayer
 -- Exemplu link valid: https://raw.githubusercontent.com/userul-tau/repo/main/logo.png
 -- ============================================================
 local ASSET_URLS = {
-    Logo = "https://github.com/PsychoCross/Disg/blob/main/19569%20(1).png",
+    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19569%20(1).png",
     -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
     -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
     Tabs = {
-        Main      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-02-397.pngn",
+        Main      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-02-397.png",
         Combat    = "https://github.com/PsychoCross/Disg/blob/main/19577-removebg-preview_upscaled.png",
         Rage      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-19-712.png",
         Movement  = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-06-27-427.png",
