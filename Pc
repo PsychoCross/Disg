@@ -30,14 +30,14 @@ local ASSET_URLS = {
     -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
     -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
     Tabs = {
-        Main      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Main",
-        Combat    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Combat",
-        Rage      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Rage",
-        Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Movement",
-        Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Visual",
+        Main      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-02-397.pngn",
+        Combat    = "https://github.com/PsychoCross/Disg/blob/main/19577-removebg-preview_upscaled.png",
+        Rage      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-19-712.png",
+        Movement  = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-06-27-427.png",
+        Visual    = "https://github.com/PsychoCross/Disg/blob/main/19580-removebg-preview_upscaled.png",
         Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport",
-        Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Config",
-        Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Credit",
+        Config    = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-08-55-164.png",
+        Credit    = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-06-08-231.png",
     },
     -- Iconițe pentru butoanele sociale din Credits
     Socials = {
@@ -2137,4 +2137,3 @@ Window:CreateCreditsTab({
 })
 ============================================================
 ]]--
-
