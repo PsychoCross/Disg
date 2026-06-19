@@ -861,11 +861,21 @@ function BLAME:CreateWindow(config)
     Window._activeTab = nil
     Window._elements  = {}
 
-    if ShowLoadingScreen and not AssetsAlreadyCached then
+    -- ============================================================
+    -- DETECTARE INSTANTĂ ȘI AFIȘARE
+    -- ============================================================
+    if AssetsAlreadyCached then
+        -- Dacă toate fișierele sunt deja în folderul BLAME/assets, 
+        -- deschidem direct fereastra principală fără niciun delay sau ecran de loading.
+        RevealMain()
+    elseif ShowLoadingScreen then
+        -- Dacă lipsește cel puțin un asset, pornim ecranul de loading normal.
         CreateLoadingScreen(ScreenGui, {onComplete = RevealMain})
     else
+        -- În cazul în care loading screen-ul este dezactivat manual din config
         RevealMain()
     end
+
 
     local function SerializeConfig()
         local data = {}
