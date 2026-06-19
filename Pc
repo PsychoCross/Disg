@@ -27,28 +27,30 @@ local LocalPlayer = Players.LocalPlayer
 -- ============================================================
 local ASSET_URLS = {
     Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19569%20(1).png",
-    -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
-    -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
+    
     Tabs = {
-        Main      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-02-397.png",
-        Combat    = "https://github.com/PsychoCross/Disg/blob/main/19577-removebg-preview_upscaled.png",
-        Rage      = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-03-19-712.png",
-        Movement  = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-06-27-427.png",
-        Visual    = "https://github.com/PsychoCross/Disg/blob/main/19580-removebg-preview_upscaled.png",
+        Main      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-03-02-397.png",
+        Combat    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19577-removebg-preview_upscaled.png",
+        Rage      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-03-19-712.png",
+        Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-27-427.png",
+        Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19580-removebg-preview_upscaled.png",
+        -- ⚠️ ATENȚIE: Verifică dacă aceste trei fișiere au extensie (ex: .png) pe GitHub. 
+        -- Dacă au, adaugă-le la finalul link-ului (ex: /Teleport.png)
         Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport",
-        Config    = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-08-55-164.png",
-        Credit    = "https://github.com/PsychoCross/Disg/blob/main/Picsart_26-06-19_12-06-08-231.png",
+        Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-08-55-164.png",
+        Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-08-231.png",
     },
-    -- Iconițe pentru butoanele sociale din Credits
+    
     Socials = {
         Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube",
         Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord",
     },
-    -- Avataruri custom pentru Credits (cheia = numele dev-ului exact cum apare în devs[].name)
+    
     Avatars = {
         -- occult = "https://raw.githubusercontent.com/PsychoCross/Disg/main/avatars/occult.png",
     },
 }
+
 
 -- 📏 Dimensiunea (în px) a iconițelor de tab. TOATE folosesc aceeași mărime de bază.
 -- Dacă o imagine pare totuși mai mică vizual (pentru că PNG-ul sursă are spațiu gol
