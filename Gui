@@ -692,7 +692,7 @@ end
 function BLAME:CreateWindow(config)
     config = config or {}
     local Title    = config.Title    or "BLAME"
-    local SubTitle = config.SubTitle or "v3.1 | occult"
+    local SubTitle = config.SubTitle or "v1.0 beta | Dont Blame Me For Not Working"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
     local LogoUrl  = config.LogoUrl  or ASSET_URLS.Logo
     local ShowLoadingScreen = config.LoadingScreen ~= false
@@ -1696,7 +1696,7 @@ function BLAME:CreateWindow(config)
             Position=UDim2.new(0,88,0,54),
             Size=UDim2.new(1,-100,0,18),
             BackgroundTransparency=1,
-            Text=(cfg.version or "v3.1").."  •  occult library",
+            Text=(cfg.version or "v1.0 beta").."  • good.",
             TextColor3=Theme.TextSecondary,
             Font=Enum.Font.GothamMedium, TextSize=11,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6,
@@ -1938,8 +1938,8 @@ function BLAME:CreateWindow(config)
 
         local statsData = cfg.stats or {
             {label="Version", value=cfg.version or "v3.1"},
-            {label="Components", value="9"},
-            {label="Status", value="Active"},
+            {label="Dev Team Size", value="1"},
+            {label="Status", value="WORKING!"},
         }
         local StatsRow = Create("Frame", {
             Parent=Page, Size=UDim2.new(1,-4,0,56),
@@ -1984,7 +1984,7 @@ function BLAME:CreateWindow(config)
         local FooterLabel = Create("TextLabel", {
             Parent=Footer, Size=UDim2.new(1,0,1,0),
             BackgroundTransparency=1,
-            Text="made with BLAME  •  "..(cfg.discord and cfg.discord.url or "discord.gg/BLAME"),
+            Text="made with BLAME  • i dont have a discord channel  "..(cfg.discord and cfg.discord.url or "discord.gg/BLAME"),
             TextColor3=Theme.TextDim, Font=Enum.Font.GothamMedium, TextSize=10, ZIndex=4,
         })
         task.spawn(function()
