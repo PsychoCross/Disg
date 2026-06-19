@@ -6,8 +6,8 @@
 -- ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚══════╝╚═════╝
 -- Version: 3.1.1 | Fixed: Loading Lockout, Asset Threading, Extension Fallbacks
 
-local ACTED = {}
-ACTED.__index = ACTED
+local BLAME = {}
+BLAME.__index = BLAME
 
 -- Services
 local Players          = game:GetService("Players")
@@ -83,11 +83,11 @@ AssetLoader._failed  = {}
 AssetLoader._total   = 0
 AssetLoader._loaded  = 0
 
-local ASSET_FOLDER = "ACTED/assets"
+local ASSET_FOLDER = "BLAME/assets"
 
 local function EnsureAssetFolder()
     pcall(function()
-        if not isfolder("ACTED")        then makefolder("ACTED")        end
+        if not isfolder("BLAME")        then makefolder("BLAME")        end
         if not isfolder(ASSET_FOLDER)   then makefolder(ASSET_FOLDER)   end
     end)
 end
@@ -355,11 +355,11 @@ local _openDropdown = nil
 -- ============================================================
 -- CONFIG / FOLDER SYSTEM
 -- ============================================================
-local HUB_FOLDER    = "ACTED"
+local HUB_FOLDER    = "BLAME"
 local CONFIG_FOLDER = HUB_FOLDER .. "/configs"
 local META_FOLDER   = HUB_FOLDER .. "/meta"
-local META_FILE     = META_FOLDER .. "/ACTED_configs.json"
-local AUTOLOAD_FILE = META_FOLDER .. "/ACTED_autoload.json"
+local META_FILE     = META_FOLDER .. "/BLAME_configs.json"
+local AUTOLOAD_FILE = META_FOLDER .. "/BLAME_autoload.json"
 
 local function EnsureFolders()
     pcall(function()
@@ -418,7 +418,7 @@ local function CreateLoadingScreen(screenGui, opts)
     opts = opts or {}
     local onComplete = opts.onComplete
     local LoadGui = Create("ScreenGui", {
-        Name           = "ACTED_LoadingScreen",
+        Name           = "BLAME_LoadingScreen",
         DisplayOrder   = 9999,
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
@@ -563,7 +563,7 @@ local function CreateLoadingScreen(screenGui, opts)
 
     local TitleLabel = Create("TextLabel", {
         Parent = Card, Position = UDim2.new(0,0,0,96), Size = UDim2.new(1,0,0,28),
-        BackgroundTransparency = 1, Text = "ACTED",
+        BackgroundTransparency = 1, Text = "BLAME",
         TextColor3 = Theme.TextPrimary, Font = Enum.Font.GothamBlack, TextSize = 24,
         ZIndex = 7,
     })
@@ -689,9 +689,9 @@ end
 -- ============================================================
 -- MAIN LIBRARY
 -- ============================================================
-function ACTED:CreateWindow(config)
+function BLAME:CreateWindow(config)
     config = config or {}
-    local Title    = config.Title    or "ACTED"
+    local Title    = config.Title    or "BLAME"
     local SubTitle = config.SubTitle or "v3.1 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
     local LogoUrl  = config.LogoUrl  or ASSET_URLS.Logo
@@ -705,7 +705,7 @@ function ACTED:CreateWindow(config)
     AssetLoader.PrefetchAll(AllKnownAssets)
 
     local ScreenGui = Create("ScreenGui", {
-        Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
+        Name           = "BLAMELib_" .. tostring(math.random(1e6)),
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         DisplayOrder   = 999,
@@ -890,7 +890,7 @@ function ACTED:CreateWindow(config)
         local saved = false
         pcall(function() writefile(ConfigFileName(name),json); AddConfigToList(name); saved=true end)
         if saved then Window:Notify("Config","Saved: "..name..".cfg","success",3)
-        else print("[ACTED Config] "..name..":\n"..json); Window:Notify("Config","Saved to console.","warning",3) end
+        else print("[BLAME Config] "..name..":\n"..json); Window:Notify("Config","Saved to console.","warning",3) end
         return json
     end
 
@@ -1677,7 +1677,7 @@ function ACTED:CreateWindow(config)
             Position=UDim2.new(0,88,0,16),
             Size=UDim2.new(1,-100,0,34),
             BackgroundTransparency=1,
-            Text=cfg.name or "ACTED",
+            Text=cfg.name or "BLAME",
             TextColor3=Theme.TextPrimary,
             Font=Enum.Font.GothamBlack, TextSize=26,
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6,
@@ -1984,7 +1984,7 @@ function ACTED:CreateWindow(config)
         local FooterLabel = Create("TextLabel", {
             Parent=Footer, Size=UDim2.new(1,0,1,0),
             BackgroundTransparency=1,
-            Text="made with ACTED  •  "..(cfg.discord and cfg.discord.url or "discord.gg/acted"),
+            Text="made with BLAME  •  "..(cfg.discord and cfg.discord.url or "discord.gg/BLAME"),
             TextColor3=Theme.TextDim, Font=Enum.Font.GothamMedium, TextSize=10, ZIndex=4,
         })
         task.spawn(function()
@@ -2005,10 +2005,10 @@ function ACTED:CreateWindow(config)
         local icons ={info="i",success="✓",warning="!",error="✕"}
         local col=colors[ntype] or Theme.Accent; local icon=icons[ntype] or "i"
 
-        local NHolder=ScreenGui:FindFirstChild("ACTED_NotifHolder")
+        local NHolder=ScreenGui:FindFirstChild("BLAME_NotifHolder")
         if not NHolder then
             NHolder=Create("Frame",{
-                Name="ACTED_NotifHolder",Parent=ScreenGui,
+                Name="BLAME_NotifHolder",Parent=ScreenGui,
                 Position=UDim2.new(1,-340,1,-40),Size=UDim2.new(0,320,0,0),
                 BackgroundTransparency=1,ZIndex=200,
             })
@@ -2055,7 +2055,7 @@ function ACTED:CreateWindow(config)
     end
 
     task.delay(1.2, function()
-        Window:Notify("ACTED", "Core modules loaded successfully.", "success", 3)
+        Window:Notify("BLAME", "Loaded successfully sadly...", "success", 3)
     end)
 
     task.delay(2.2, function()
@@ -2069,4 +2069,4 @@ function ACTED:CreateWindow(config)
     return Window
 end
 
-return ACTED
+return BLAME
