@@ -24,9 +24,6 @@ local LocalPlayer = Players.LocalPlayer
 -- Blob links (github.com/user/repo/blob/...) will NOT work.
 -- Use raw links (raw.githubusercontent.com/user/repo/main/...)
 -- ============================================================
--- Automatically rewrites a GitHub "blob" view link (github.com/u/r/blob/...)
--- into the equivalent raw.githubusercontent.com link, so pasting a normal
--- GitHub URL by mistake doesn't silently break asset loading.
 local function NormalizeAssetUrl(url)
     if type(url) ~= "string" then return url end
     local user, repo, branch, path = url:match("^https?://github%.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$")
@@ -45,14 +42,16 @@ local ASSET_URLS = {
         Rage      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-03-19-712.png",
         Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-27-427.png",
         Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19580-removebg-preview_upscaled.png",
-        Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport.png",
+        -- FIX: removed .png extension (files have no extension on GitHub)
+        Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport",
         Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-08-55-164.png",
         Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-08-231.png",
     },
 
     Socials = {
-        Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube.png",
-        Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord.png",
+        -- FIX: removed .png extension (files have no extension on GitHub)
+        Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube",
+        Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord",
     },
 
     Avatars = {
@@ -60,8 +59,6 @@ local ASSET_URLS = {
     },
 }
 
--- Recursively collects every URL string inside a (possibly nested) table.
--- Used to know the full asset list up-front, before anything is requested.
 local function CollectAssetUrls(t, out)
     out = out or {}
     for _, v in pairs(t) do
@@ -74,7 +71,6 @@ local function CollectAssetUrls(t, out)
     return out
 end
 
--- Tab icon base size and per-tab scale multipliers
 local TAB_ICON_SIZE  = 26
 local TAB_ICON_SCALE = {
     Combat = 1.35,
@@ -82,19 +78,16 @@ local TAB_ICON_SCALE = {
 }
 
 -- ============================================================
--- ASSET LOADER — Downloads images from GitHub and caches them
--- locally so Roblox can use them without rbxassetid uploads.
--- Requires: HttpGet + writefile + getcustomasset (Delta, Synapse X, etc.)
--- Falls back to a grey placeholder if the executor lacks support.
+-- ASSET LOADER
 -- ============================================================
 local FALLBACK_IMAGE = "rbxassetid://131583568098851"
 
 local AssetLoader = {}
-AssetLoader._cache   = {}  -- url -> final image string
-AssetLoader._pending = {}  -- url -> list of callbacks waiting on an in-flight download
-AssetLoader._failed  = {}  -- url -> true, for URLs that never produced a valid image
-AssetLoader._total   = 0   -- how many unique loads have been requested
-AssetLoader._loaded  = 0   -- how many have finished (success or fail)
+AssetLoader._cache   = {}
+AssetLoader._pending = {}
+AssetLoader._failed  = {}
+AssetLoader._total   = 0
+AssetLoader._loaded  = 0
 
 local ASSET_FOLDER = "ACTED/assets"
 
@@ -112,16 +105,12 @@ local function UrlToFileName(url)
     return ASSET_FOLDER .. "/" .. tostring(hash) .. "." .. ext
 end
 
--- Recognised binary image signatures. Anything else (an HTML error page,
--- GitHub's plain-text "404: Not Found" response, an empty/truncated body)
--- gets rejected instead of being saved as if it were a real image — this
--- is what was silently corrupting the icon cache before.
 local IMAGE_SIGNATURES = {
-    "\137PNG",      -- PNG
-    "\255\216\255", -- JPEG
-    "GIF87a",        -- GIF
-    "GIF89a",        -- GIF
-    "BM",            -- BMP
+    "\137PNG",
+    "\255\216\255",
+    "GIF87a",
+    "GIF89a",
+    "BM",
 }
 
 local function IsValidImageData(data)
@@ -155,10 +144,6 @@ local function DownloadTo(url, path)
     return ok2
 end
 
--- A file on disk might be a corrupted leftover from a previous failed
--- download (e.g. an old version of this script saved a "404" page as if
--- it were a .png). Validate before trusting the cache, and wipe it if bad
--- so it gets re-downloaded properly.
 local function IsCachedFileValid(path)
     local ok, data = pcall(readfile, path)
     if not ok or not IsValidImageData(data) then
@@ -168,12 +153,6 @@ local function IsCachedFileValid(path)
     return true
 end
 
--- Returns a placeholder immediately; calls callback(realImage) when ready.
--- Tracks _total / _loaded so the loading screen can show progress.
--- Concurrent calls for the same URL are merged into one download instead
--- of racing each other to write the same file (this used to corrupt the
--- logo, which was requested twice at once — once by the loading screen,
--- once by the top bar).
 function AssetLoader.Get(url, callback)
     if not url or url == "" then
         if callback then callback(FALLBACK_IMAGE) end
@@ -181,21 +160,17 @@ function AssetLoader.Get(url, callback)
     end
     url = NormalizeAssetUrl(url)
 
-    -- Already cached — instant, doesn't count toward load progress
     if AssetLoader._cache[url] then
         if callback then callback(AssetLoader._cache[url]) end
         return AssetLoader._cache[url]
     end
 
-    -- Already downloading — attach this callback instead of starting a
-    -- duplicate, racing download.
     if AssetLoader._pending[url] then
         if callback then table.insert(AssetLoader._pending[url], callback) end
         return FALLBACK_IMAGE
     end
     AssetLoader._pending[url] = callback and {callback} or {}
 
-    -- Count this as a pending load
     AssetLoader._total = AssetLoader._total + 1
 
     local function Finish(result, failed)
@@ -218,7 +193,6 @@ function AssetLoader.Get(url, callback)
 
     task.spawn(function()
         local ok, err = pcall(function()
-            -- Use cached file on disk if it exists AND is a valid image
             local needsDownload = true
             pcall(function() needsDownload = not isfile(path) end)
             if not needsDownload and not IsCachedFileValid(path) then
@@ -234,9 +208,6 @@ function AssetLoader.Get(url, callback)
             Finish((ok2 and asset) and asset or FALLBACK_IMAGE, not (ok2 and asset))
         end)
         if not ok then
-            -- Guarantees Finish() always runs, even if something above
-            -- throws unexpectedly — otherwise _loaded would never catch
-            -- up to _total and the loading screen would hang forever.
             warn("[ACTED] Unexpected error loading asset: " .. tostring(url) .. " -> " .. tostring(err))
             Finish(FALLBACK_IMAGE, true)
         end
@@ -245,9 +216,6 @@ function AssetLoader.Get(url, callback)
     return FALLBACK_IMAGE
 end
 
--- Pure disk check (no network calls) — true only if every URL already has
--- a valid cached file. Used to skip the download animation entirely when
--- the player has already downloaded everything before.
 function AssetLoader.AllCached(urls)
     if not (SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then return false end
     for _, rawUrl in ipairs(urls) do
@@ -261,15 +229,10 @@ function AssetLoader.AllCached(urls)
     return true
 end
 
--- Kicks off (or attaches to) a download for every URL up-front, so that
--- AssetLoader._total reflects the real workload before the loading
--- screen starts polling progress — this is what previously let the
--- loading screen vanish before tab icons had even been requested.
 function AssetLoader.PrefetchAll(urls)
     for _, url in ipairs(urls) do AssetLoader.Get(url) end
 end
 
--- Convenience: set Image on an ImageLabel and fade it in when ready
 function AssetLoader.Apply(imageObj, url)
     if not imageObj then return end
     imageObj.Image = FALLBACK_IMAGE
@@ -393,7 +356,6 @@ local function RoundTo(v, d)
     return math.floor(v * f + 0.5) / f
 end
 
--- Only one dropdown open at a time
 local _openDropdown = nil
 
 -- ============================================================
@@ -461,7 +423,6 @@ end
 local function CreateLoadingScreen(screenGui, opts)
     opts = opts or {}
     local onComplete = opts.onComplete
-    -- Uses a separate ScreenGui so it sits on top of everything
     local LoadGui = Create("ScreenGui", {
         Name           = "ACTED_LoadingScreen",
         DisplayOrder   = 9999,
@@ -471,7 +432,6 @@ local function CreateLoadingScreen(screenGui, opts)
     pcall(function() LoadGui.Parent = CoreGui end)
     if not LoadGui.Parent then LoadGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 
-    -- Full-screen dark overlay
     local Bg = Create("Frame", {
         Parent           = LoadGui,
         Size             = UDim2.new(1, 0, 1, 0),
@@ -479,7 +439,6 @@ local function CreateLoadingScreen(screenGui, opts)
         ZIndex           = 1,
     })
 
-    -- Floating particles
     for i = 1, 35 do
         local p = Create("Frame", {
             Parent           = Bg,
@@ -508,7 +467,6 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end
 
-    -- Gradient vignette
     local Vignette = Create("Frame", {
         Parent = Bg, Size = UDim2.new(1,0,1,0),
         BackgroundColor3 = Color3.fromRGB(0,0,0), ZIndex = 2,
@@ -527,7 +485,6 @@ local function CreateLoadingScreen(screenGui, opts)
         }),
     })
 
-    -- Center card (AnchorPoint keeps it centred while the size tweens in)
     local CardFinalSize = UDim2.new(0, 300, 0, 210)
     local Card = Create("Frame", {
         Parent           = Bg,
@@ -543,7 +500,6 @@ local function CreateLoadingScreen(screenGui, opts)
     PulseGlow(cardStroke, Theme.Border, Theme.AccentGlow, 1.4)
     Tween(Card, {Size = CardFinalSize, BackgroundTransparency = 0}, 0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-    -- Subtle card gradient
     Create("UIGradient", {
         Parent = Card, Rotation = 135,
         Color = ColorSequence.new({
@@ -552,17 +508,17 @@ local function CreateLoadingScreen(screenGui, opts)
         }),
     })
 
-    -- Logo ring with spinning glow
+    -- FIX: ClipsDescendants=true so logo is clipped to the circular ring
     local Ring = Create("Frame", {
         Parent           = Card,
         Size             = UDim2.new(0, 68, 0, 68),
         Position         = UDim2.new(0.5, -34, 0, 18),
         BackgroundColor3 = Theme.Background,
+        ClipsDescendants = true,
         ZIndex           = 7,
     })
     AddCorner(Ring, 999)
     local ringStroke = AddStroke(Ring, Theme.Accent, 2.5, 0)
-    -- Animated ring glow
     spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
@@ -573,7 +529,6 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end)
 
-    -- Spinning outer arc decoration
     local Arc = Create("Frame", {
         Parent = Card, Size = UDim2.new(0,80,0,80),
         Position = UDim2.new(0.5,-40,0,9),
@@ -582,8 +537,7 @@ local function CreateLoadingScreen(screenGui, opts)
     local ArcImg = Create("ImageLabel", {
         Parent = Arc, Size = UDim2.new(1,0,1,0),
         BackgroundTransparency = 1,
-        -- Simple spinning ring via rotation tween on the frame itself
-        Image = "rbxassetid://6764432730", -- circle outline
+        Image = "rbxassetid://6764432730",
         ImageColor3 = Theme.Accent,
         ImageTransparency = 0.5,
         ZIndex = 6,
@@ -599,14 +553,15 @@ local function CreateLoadingScreen(screenGui, opts)
 
     local LogoImg = Create("ImageLabel", {
         Parent           = Ring,
-        Size             = UDim2.new(1,-10,1,-10),
-        Position         = UDim2.new(0,5,0,5),
+        Size             = UDim2.new(1,0,1,0),  -- FIX: fill the ring fully
+        Position         = UDim2.new(0,0,0,0),
         BackgroundTransparency = 1,
         Image            = FALLBACK_IMAGE,
-        ScaleType        = Enum.ScaleType.Fit,
+        ScaleType        = Enum.ScaleType.Crop,  -- FIX: Crop fills circle cleanly
         ZIndex           = 8,
     })
-    -- Load logo in background; loading screen will dismiss on its own schedule
+    -- FIX: round the image itself so it matches the circular container
+    AddCorner(LogoImg, 999)
     AssetLoader.Get(ASSET_URLS.Logo, function(img)
         if LogoImg and LogoImg.Parent then
             LogoImg.ImageTransparency = 1
@@ -615,14 +570,12 @@ local function CreateLoadingScreen(screenGui, opts)
         end
     end)
 
-    -- Title
     local TitleLabel = Create("TextLabel", {
         Parent = Card, Position = UDim2.new(0,0,0,96), Size = UDim2.new(1,0,0,28),
         BackgroundTransparency = 1, Text = "ACTED",
         TextColor3 = Theme.TextPrimary, Font = Enum.Font.GothamBlack, TextSize = 24,
         ZIndex = 7,
     })
-    -- Colour sweep on title
     spawn(function()
         local angle = 0
         RunService.Heartbeat:Connect(function(dt)
@@ -640,7 +593,6 @@ local function CreateLoadingScreen(screenGui, opts)
         ZIndex = 7,
     })
 
-    -- Progress bar background
     local ProgBG = Create("Frame", {
         Parent           = Card,
         Position         = UDim2.new(0, 22, 0, 152),
@@ -666,7 +618,6 @@ local function CreateLoadingScreen(screenGui, opts)
         }),
     })
 
-    -- Shine sweep on progress fill
     local Shine = Create("Frame", {
         Parent = ProgFill, Size = UDim2.new(0,30,1,0), Position = UDim2.new(-0.2,0,0,0),
         BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.7,
@@ -688,13 +639,11 @@ local function CreateLoadingScreen(screenGui, opts)
         ZIndex = 7,
     })
 
-    -- Dismiss (fade out and destroy)
     local dismissed = false
     local function Dismiss()
         if dismissed then return end
         dismissed = true
         if onComplete then pcall(onComplete) end
-        -- Animate out: card slides up, overlay fades
         Tween(Card, {Position = UDim2.new(0.5,0,0.4,0), BackgroundTransparency = 1}, 0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         Tween(Bg,   {BackgroundTransparency = 1}, 0.65, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         for _, c in ipairs(Card:GetDescendants()) do
@@ -709,11 +658,8 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end
 
-    -- Progress update loop. Wrapped in pcall so any unexpected runtime
-    -- error inside it can't silently kill the coroutine and leave the
-    -- screen stuck (that previously left no way for Dismiss() to fire).
     spawn(function()
-        local timeout = 18  -- max wait in seconds
+        local timeout = 18
         local elapsed = 0
         while not dismissed do
             task.wait(0.05)
@@ -724,7 +670,6 @@ local function CreateLoadingScreen(screenGui, opts)
                 local loaded = AssetLoader._loaded
                 local pct    = (total > 0) and (loaded / total) or 0
 
-                -- Update UI
                 local pctInt = math.floor(pct * 100)
                 CountLabel.Text  = loaded .. " / " .. total .. " assets"
                 StatusLabel.Text = (pct >= 1 and total > 0) and "✓ Ready!" or ("Loading assets... " .. pctInt .. "%")
@@ -733,8 +678,6 @@ local function CreateLoadingScreen(screenGui, opts)
                 end
                 Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
 
-                -- Dismiss when all loaded, or there was simply nothing to
-                -- load (e.g. no assets configured)
                 local allDone = (total > 0 and loaded >= total)
                 local nothingToLoad = (total == 0 and elapsed >= 1.5)
                 if allDone or nothingToLoad then
@@ -749,9 +692,6 @@ local function CreateLoadingScreen(screenGui, opts)
         end
     end)
 
-    -- Hard failsafe: no matter what goes wrong above (a download that
-    -- hangs forever, an executor quirk, an unforeseen error), the loading
-    -- screen is GUARANTEED to close within this many seconds.
     task.delay(20, Dismiss)
 
     return {Dismiss = Dismiss}
@@ -766,22 +706,16 @@ function ACTED:CreateWindow(config)
     local SubTitle = config.SubTitle or "v3.1 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
     local LogoUrl  = config.LogoUrl  or ASSET_URLS.Logo
-    local ShowLoadingScreen = config.LoadingScreen ~= false  -- true by default
+    local ShowLoadingScreen = config.LoadingScreen ~= false
 
     local _configData = {}
     EnsureFolders()
 
-    -- Gather every known asset URL (logo, tab icons, social icons, avatars)
-    -- and kick off their downloads immediately. Doing this before the
-    -- loading screen is created means its progress bar reflects the real
-    -- total from the very first frame, instead of growing piecemeal as
-    -- tabs get created later (which used to let it close itself early).
     local AllKnownAssets = CollectAssetUrls(ASSET_URLS)
     if LogoUrl ~= ASSET_URLS.Logo then table.insert(AllKnownAssets, LogoUrl) end
     local AssetsAlreadyCached = AssetLoader.AllCached(AllKnownAssets)
     AssetLoader.PrefetchAll(AllKnownAssets)
 
-    -- Main ScreenGui
     local ScreenGui = Create("ScreenGui", {
         Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
         ResetOnSpawn   = false,
@@ -793,13 +727,8 @@ function ACTED:CreateWindow(config)
         ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
     end
 
-    -- Background blur (animated in once the hub is actually revealed)
     local blur = Create("BlurEffect", {Parent = game:GetService("Lighting"), Size = 0})
 
-    -- ── Main window frame ────────────────────────────────────
-    -- Stays hidden (zero size, fully transparent) until assets are ready —
-    -- either revealed instantly (everything already cached) or once the
-    -- loading screen finishes downloading.
     local Main = Create("Frame", {
         Name             = "Main",
         Parent           = ScreenGui,
@@ -821,7 +750,6 @@ function ACTED:CreateWindow(config)
         Tween(Main, {Size = Size, BackgroundTransparency = 0}, 0.45, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
     end
 
-    -- Gradient overlay
     local Gradient = Create("Frame", {
         Parent = Main, Size = UDim2.new(1,0,1,0),
         BackgroundColor3 = Color3.fromRGB(100,30,180),
@@ -840,7 +768,6 @@ function ACTED:CreateWindow(config)
         }),
     })
 
-    -- Tab sidebar
     local TabBar = Create("ScrollingFrame", {
         Parent = Main, Position = UDim2.new(0,0,0,52), Size = UDim2.new(0,130,1,-52),
         BackgroundColor3 = Theme.Surface, BorderSizePixel = 0,
@@ -860,7 +787,6 @@ function ACTED:CreateWindow(config)
         BackgroundTransparency=1, ClipsDescendants=true, ZIndex=2,
     })
 
-    -- Top bar
     local TopBar = Create("Frame", {
         Parent=Main, Size=UDim2.new(1,0,0,52),
         BackgroundColor3=Theme.Surface, ZIndex=10,
@@ -871,17 +797,22 @@ function ACTED:CreateWindow(config)
         BackgroundColor3=Theme.Surface, BorderSizePixel=0, ZIndex=9,
     })
 
-    -- Logo
+    -- FIX: ClipsDescendants=true so logo image is clipped to the rounded frame
     local LogoFrame = Create("Frame", {
         Parent=TopBar, Size=UDim2.new(0,44,0,44), Position=UDim2.new(0,6,0,4),
         BackgroundColor3=Theme.Background, ZIndex=11,
+        ClipsDescendants=true,
     })
     AddCorner(LogoFrame, 10)
     local logoStroke = AddStroke(LogoFrame, Theme.Accent, 1.5)
     local LogoImage = Create("ImageLabel", {
-        Parent=LogoFrame, Size=UDim2.new(1,-4,1,-4), Position=UDim2.new(0,2,0,2),
-        BackgroundTransparency=1, Image=FALLBACK_IMAGE, ScaleType=Enum.ScaleType.Fit, ZIndex=12,
+        Parent=LogoFrame, Size=UDim2.new(1,0,1,0),  -- FIX: fill frame fully
+        Position=UDim2.new(0,0,0,0),
+        BackgroundTransparency=1, Image=FALLBACK_IMAGE,
+        ScaleType=Enum.ScaleType.Crop, ZIndex=12,  -- FIX: Crop for clean fill
     })
+    -- FIX: round the image so it matches the rounded frame
+    AddCorner(LogoImage, 10)
     AssetLoader.Apply(LogoImage, LogoUrl)
     spawn(function()
         local angle = 0
@@ -939,22 +870,17 @@ function ACTED:CreateWindow(config)
 
     MakeDraggable(Main, TopBar)
 
-    -- ── Window object ────────────────────────────────────────
     local Window = {}
     Window._tabs      = {}
     Window._activeTab = nil
     Window._elements  = {}
 
-    -- Start loading screen — but only if there's actually something to
-    -- download. If every asset is already cached on disk from a previous
-    -- run, skip the animation entirely and show the hub right away.
     if ShowLoadingScreen and not AssetsAlreadyCached then
         CreateLoadingScreen(ScreenGui, {onComplete = RevealMain})
     else
         RevealMain()
     end
 
-    -- Config serialization helpers
     local function SerializeConfig()
         local data = {}
         for _, el in ipairs(Window._elements) do data[el.key] = el.get() end
@@ -1104,7 +1030,6 @@ function ACTED:CreateWindow(config)
         end
 
         local iconSize = math.floor(TAB_ICON_SIZE * (TAB_ICON_SCALE[name] or 1))
-        -- Indent text enough to leave room for icon
         local textIndent = iconIsImage and string.rep(" ", math.max(3, math.floor(iconSize/4)+1)) or ""
         local prefix     = (not iconIsImage and icon and not iconIsImage) and (icon.." ") or ""
 
@@ -1620,14 +1545,13 @@ function ACTED:CreateWindow(config)
     end  -- CreateTab
 
     -- ============================================================
-    -- CREDITS TAB — fully fixed layout & images
+    -- CREDITS TAB
     -- ============================================================
     function Window:CreateCreditsTab(cfg)
         cfg = cfg or {}
         local tabData = {_sections={}}
         local creditsIconUrl = cfg.icon or ASSET_URLS.Tabs.Credit
 
-        -- ── Tab button ────────────────────────────────────────
         local iconSize = math.floor(TAB_ICON_SIZE * (TAB_ICON_SCALE.Credit or 1))
         local textIndent = creditsIconUrl and string.rep(" ", math.max(3, math.floor(iconSize/4)+1)) or ""
         local TabBtn = Create("TextButton", {
@@ -1697,7 +1621,6 @@ function ACTED:CreateWindow(config)
         local heroStroke = AddStroke(HeroBanner, Theme.Accent, 2, 0.05)
         PulseGlow(heroStroke, Theme.Border, Theme.AccentGlow, 1.1)
 
-        -- Animated aurora background
         local Aurora = Create("Frame", {
             Parent=HeroBanner, Size=UDim2.new(2.2,0,2.2,0),
             Position=UDim2.new(-0.6,0,-0.6,0),
@@ -1722,7 +1645,6 @@ function ACTED:CreateWindow(config)
             end)
         end)
 
-        -- Stars / sparkles
         for i=1,20 do
             local star=Create("Frame",{
                 Parent=HeroBanner,
@@ -1746,12 +1668,14 @@ function ACTED:CreateWindow(config)
             end)
         end
 
-        -- ── Logo ring (properly sized and centered vertically) ─
+        -- FIX: ClipsDescendants=true so logo is clipped to the circular ring
         local LogoRing = Create("Frame", {
             Parent=HeroBanner,
             Size=UDim2.new(0,68,0,68),
-            Position=UDim2.new(0,10,0.5,-34),  -- centred vertically in banner
-            BackgroundColor3=Theme.Background, ZIndex=6,
+            Position=UDim2.new(0,10,0.5,-34),
+            BackgroundColor3=Theme.Background,
+            ClipsDescendants=true,  -- FIX
+            ZIndex=6,
         })
         AddCorner(LogoRing, 999)
         local logoRingStroke = AddStroke(LogoRing, Theme.Accent, 2, 0)
@@ -1759,16 +1683,17 @@ function ACTED:CreateWindow(config)
 
         local CreditsLogo = Create("ImageLabel", {
             Parent=LogoRing,
-            Size=UDim2.new(1,-10,1,-10),  -- 5px inset on each side
-            Position=UDim2.new(0,5,0,5),
+            Size=UDim2.new(1,0,1,0),       -- FIX: fill the ring fully
+            Position=UDim2.new(0,0,0,0),
             BackgroundTransparency=1,
             Image=FALLBACK_IMAGE,
-            ScaleType=Enum.ScaleType.Fit,
+            ScaleType=Enum.ScaleType.Crop,  -- FIX: Crop fills circle cleanly
             ZIndex=7,
         })
+        -- FIX: round image itself to match the circular container
+        AddCorner(CreditsLogo, 999)
         AssetLoader.Apply(CreditsLogo, cfg.logo or ASSET_URLS.Logo)
 
-        -- ── Hero text (offset to clear the logo ring) ─────────
         local HeroTitle = Create("TextLabel", {
             Parent=HeroBanner,
             Position=UDim2.new(0,88,0,16),
@@ -1799,7 +1724,6 @@ function ACTED:CreateWindow(config)
             TextXAlignment=Enum.TextXAlignment.Left, ZIndex=6,
         })
 
-        -- Version badge (top-right corner of banner)
         local VerBadge = Create("Frame", {
             Parent=HeroBanner,
             Size=UDim2.new(0,58,0,22),
@@ -1817,7 +1741,7 @@ function ACTED:CreateWindow(config)
             Font=Enum.Font.GothamBold,TextSize=11,ZIndex=7,
         })
 
-        -- ── SOCIAL BUTTONS — fixed layout using absolute sizing ─
+        -- ── SOCIAL BUTTONS ─────────────────────────────────
         if cfg.youtube or cfg.discord then
             local hasBoth  = cfg.youtube and cfg.discord
             local SocialRow = Create("Frame", {
@@ -1825,7 +1749,6 @@ function ACTED:CreateWindow(config)
                 Size=UDim2.new(1,-4,0,42),
                 BackgroundTransparency=1, ZIndex=3,
             })
-            -- Use UIListLayout horizontal with equal fills via UISizeConstraint
             Create("UIListLayout",{
                 Parent=SocialRow,
                 FillDirection=Enum.FillDirection.Horizontal,
@@ -1835,7 +1758,6 @@ function ACTED:CreateWindow(config)
             })
 
             local function MakeSocialBtn(label, imgUrl, accentCol, url, order)
-                -- Width: if both buttons, ~half; if one, full
                 local w = hasBoth and UDim2.new(0.5,-4,1,0) or UDim2.new(1,0,1,0)
                 local Btn = Create("TextButton", {
                     Parent=SocialRow,
@@ -1847,12 +1769,14 @@ function ACTED:CreateWindow(config)
                 AddCorner(Btn, 9)
                 local bStroke = AddStroke(Btn, accentCol, 1.3, 0.25)
 
-                -- Icon (left-aligned, vertically centred, fixed 24×24 px)
+                -- FIX: ClipsDescendants on icon frame so image stays inside
                 local IconFrame = Create("Frame", {
                     Parent=Btn,
                     Size=UDim2.new(0,24,0,24),
                     Position=UDim2.new(0,10,0.5,-12),
-                    BackgroundTransparency=1, ZIndex=5,
+                    BackgroundTransparency=1,
+                    ClipsDescendants=true,  -- FIX
+                    ZIndex=5,
                 })
                 local IconImg = Create("ImageLabel", {
                     Parent=IconFrame,
@@ -1865,7 +1789,6 @@ function ACTED:CreateWindow(config)
                 Create("UIAspectRatioConstraint",{Parent=IconImg,AspectRatio=1,DominantAxis=Enum.DominantAxis.Height})
                 AssetLoader.Apply(IconImg, imgUrl)
 
-                -- Label text
                 Create("TextLabel", {
                     Parent=Btn,
                     Position=UDim2.new(0,42,0,0),
@@ -1879,7 +1802,6 @@ function ACTED:CreateWindow(config)
                     ZIndex=5,
                 })
 
-                -- Accent line at bottom of button
                 local AccentLine = Create("Frame", {
                     Parent=Btn,
                     Size=UDim2.new(0,0,0,2),
@@ -1917,7 +1839,6 @@ function ACTED:CreateWindow(config)
         -- ── TEAM / DEVELOPERS ─────────────────────────────────
         local devs = cfg.devs or {{name="occult",role="Lead Developer"}}
         if #devs > 0 then
-            -- Section header
             local DevHeader = Create("Frame", {
                 Parent=Page, Size=UDim2.new(1,-4,0,22),
                 BackgroundTransparency=1, ZIndex=3,
@@ -1944,7 +1865,6 @@ function ACTED:CreateWindow(config)
                 AddCorner(DevCard, 10)
                 local cStroke = AddStroke(DevCard, Theme.Border, 1.2, 0.4)
 
-                -- Animated left accent bar
                 local LeftBar = Create("Frame", {
                     Parent=DevCard, Size=UDim2.new(0,3,0.7,0),
                     Position=UDim2.new(0,0,0.15,0),
@@ -1960,12 +1880,14 @@ function ACTED:CreateWindow(config)
                     end)
                 end)
 
-                -- Avatar frame (fixed 40×40, centred in card height)
+                -- FIX: ClipsDescendants so avatar image is clipped to the circle
                 local AvatarFrame = Create("Frame", {
                     Parent=DevCard,
                     Size=UDim2.new(0,40,0,40),
                     Position=UDim2.new(0,12,0.5,-20),
-                    BackgroundColor3=Theme.SurfaceAlt, ZIndex=4,
+                    BackgroundColor3=Theme.SurfaceAlt,
+                    ClipsDescendants=true,  -- FIX
+                    ZIndex=4,
                 })
                 AddCorner(AvatarFrame, 999)
                 AddStroke(AvatarFrame, Theme.Accent, 1.5, 0.25)
@@ -1980,7 +1902,6 @@ function ACTED:CreateWindow(config)
                     AddCorner(AvatarImg, 999)
                     AssetLoader.Apply(AvatarImg, avatarUrl)
                 else
-                    -- Initial letter placeholder
                     Create("TextLabel",{
                         Parent=AvatarFrame, Size=UDim2.new(1,0,1,0),
                         BackgroundTransparency=1,
@@ -1990,7 +1911,6 @@ function ACTED:CreateWindow(config)
                     })
                 end
 
-                -- Dev name
                 Create("TextLabel",{
                     Parent=DevCard,
                     Position=UDim2.new(0,62,0,11),
@@ -2001,7 +1921,6 @@ function ACTED:CreateWindow(config)
                     Font=Enum.Font.GothamBold, TextSize=14,
                     TextXAlignment=Enum.TextXAlignment.Left, ZIndex=4,
                 })
-                -- Dev role
                 Create("TextLabel",{
                     Parent=DevCard,
                     Position=UDim2.new(0,62,0,31),
@@ -2022,7 +1941,6 @@ function ACTED:CreateWindow(config)
                     Tween(cStroke,{Color=Theme.Border,Transparency=0.4},0.15)
                 end)
 
-                -- Discord badge (only if dev has discord)
                 if dev.discord then
                     local DiscBadge = Create("TextButton", {
                         Parent=DevCard,
@@ -2044,13 +1962,12 @@ function ACTED:CreateWindow(config)
             end
         end
 
-        -- ── STATS ROW (fixed layout) ───────────────────────────
+        -- ── STATS ROW ─────────────────────────────────────────
         local statsData = cfg.stats or {
             {label="Version", value=cfg.version or "v3.1"},
             {label="Components", value="9"},
             {label="Status", value="Active"},
         }
-        -- Use a frame with a UIListLayout for horizontal stat boxes
         local StatsRow = Create("Frame", {
             Parent=Page, Size=UDim2.new(1,-4,0,56),
             BackgroundTransparency=1, ZIndex=3,
@@ -2065,7 +1982,6 @@ function ACTED:CreateWindow(config)
         for i, stat in ipairs(statsData) do
             local StatBox = Create("Frame", {
                 Parent=StatsRow,
-                -- Equal width for all boxes
                 Size=UDim2.new(1/#statsData, -(6*(#statsData-1)/#statsData), 1, 0),
                 BackgroundColor3=Theme.Surface,
                 LayoutOrder=i, ZIndex=4,
@@ -2169,14 +2085,10 @@ function ACTED:CreateWindow(config)
         end)
     end
 
-    -- First boot notification (delayed so loading screen shows first)
     task.delay(1.2, function()
         Window:Notify("ACTED", "Core modules loaded successfully.", "success", 3)
     end)
 
-    -- If any icon/logo URL failed to download (404, wrong filename, not a
-    -- raw.githubusercontent link, etc.), surface it instead of failing
-    -- silently — check the developer console (F9) for the exact URLs.
     task.delay(2.2, function()
         local failedCount = 0
         for _ in pairs(AssetLoader._failed) do failedCount = failedCount + 1 end
