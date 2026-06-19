@@ -43,15 +43,15 @@ local ASSET_URLS = {
         Movement  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-27-427.png",
         Visual    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/19580-removebg-preview_upscaled.png",
         -- FIX: removed .png extension (files have no extension on GitHub)
-        Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport.png",
+        Teleport  = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Teleport",
         Config    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-08-55-164.png",
         Credit    = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-06-08-231.png",
     },
 
     Socials = {
         -- FIX: removed .png extension (files have no extension on GitHub)
-        Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube.png",
-        Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord.png",
+        Youtube = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Youtube",
+        Discord = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Discord",
     },
 
     Avatars = {
@@ -2104,3 +2104,4 @@ function ACTED:CreateWindow(config)
 end
 
 return ACTED
+
