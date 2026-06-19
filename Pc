@@ -26,7 +26,7 @@ local LocalPlayer = Players.LocalPlayer
 -- Exemplu link valid: https://raw.githubusercontent.com/userul-tau/repo/main/logo.png
 -- ============================================================
 local ASSET_URLS = {
-    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_02-02-19-197.png",
+    Logo = "https://github.com/PsychoCross/Disg/blob/main/19569%20(1).png",
     -- Iconițe de tab (opțional) — cheia = numele pe care îl dai tu în CreateTab(name, icon)
     -- icon = "url:Combat" înseamnă "ia URL-ul din ASSET_URLS.Tabs.Combat"
     Tabs = {
@@ -2137,3 +2137,4 @@ Window:CreateCreditsTab({
 })
 ============================================================
 ]]--
+
