@@ -6,8 +6,8 @@
 -- ╚═════╝ ╚═╝╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝
 -- Version: 2.8 | Fixes: Folders Split, Terminology Change, Animated Pro Notifications, CFG format
 
-local ACTED = {}
-ACTED.__index = ACTED
+local BLAME = {}
+BLAME.__index = BLAME
 
 -- Services
 local Players          = game:GetService("Players")
@@ -137,11 +137,11 @@ local _openDropdown = nil
 -- ============================================================
 -- Config settings management & Folder System
 -- ============================================================
-local HUB_FOLDER      = "ACTED"
+local HUB_FOLDER      = "BLAME"
 local CONFIG_FOLDER   = HUB_FOLDER .. "/configs"
 local SETTINGS_FOLDER = HUB_FOLDER .. "/settings"
-local SETTINGS_FILE   = SETTINGS_FOLDER .. "/ACTED_settings.json"
-local AUTOLOAD_FILE   = SETTINGS_FOLDER .. "/ACTED_autoload.json"
+local SETTINGS_FILE   = SETTINGS_FOLDER .. "/BLAME_settings.json"
+local AUTOLOAD_FILE   = SETTINGS_FOLDER .. "/BLAME_autoload.json"
 
 local function EnsureFolders()
     pcall(function()
@@ -217,9 +217,9 @@ end
 -- ============================================================
 -- MAIN LIBRARY
 -- ============================================================
-function ACTED:CreateWindow(config)
+function BLAME:CreateWindow(config)
     config = config or {}
-    local Title    = config.Title    or "ACTED"
+    local Title    = config.Title    or "BLAME"
     local SubTitle = config.SubTitle or "v2.8 | occult"
     local Size     = config.Size     or UDim2.new(0, 560, 0, 420)
 
@@ -227,7 +227,7 @@ function ACTED:CreateWindow(config)
     EnsureFolders()
 
     local ScreenGui = Create("ScreenGui", {
-        Name           = "ACTEDLib_" .. tostring(math.random(1e6)),
+        Name           = "BLAMELib_" .. tostring(math.random(1e6)),
         ResetOnSpawn   = false,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
         DisplayOrder   = 999,
@@ -445,7 +445,7 @@ function ACTED:CreateWindow(config)
         if saved then
             Window:Notify("Config", "Saved setting: " .. settingName .. ".cfg", "success", 3)
         else
-            print("[ACTED Config Save] " .. settingName .. ":\n" .. json)
+            print("[BLAME Config Save] " .. settingName .. ":\n" .. json)
             Window:Notify("Config", "Saved to console (no writefile).", "warning", 3)
         end
         return json
@@ -1343,10 +1343,10 @@ function ACTED:CreateWindow(config)
         local icon = icons[ntype]  or "i"
 
         -- Container Holder (Partea de jos-dreapta, cu padding)
-        local NHolder = ScreenGui:FindFirstChild("ACTED_NotifHolder")
+        local NHolder = ScreenGui:FindFirstChild("BLAME_NotifHolder")
         if not NHolder then
             NHolder = Create("Frame", {
-                Name = "ACTED_NotifHolder", Parent = ScreenGui,
+                Name = "BLAME_NotifHolder", Parent = ScreenGui,
                 Position = UDim2.new(1, -340, 1, -40),
                 Size = UDim2.new(0, 320, 0, 0),
                 BackgroundTransparency = 1, ZIndex = 200,
@@ -1466,10 +1466,10 @@ function ACTED:CreateWindow(config)
     end
 
     task.delay(0.6, function()
-        Window:Notify("ACTED", "Loaded core modules.", "success", 3)
+        Window:Notify("BLAME", "Loaded with no life lol...", "success", 3)
     end)
 
     return Window
 end
 
-return ACTED
+return BLAME
