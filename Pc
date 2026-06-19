@@ -91,8 +91,23 @@ local function DownloadTo(url, path)
         end
         return nil
     end)
-    if not ok or not data or #data == 0 then return false end
-    local ok2 = pcall(writefile, path, data)
+    if not ok then
+        warn("[ACTED AssetLoader] HttpGet a eșuat pentru " .. url .. " -> " .. tostring(data))
+        return false
+    end
+    if not data or #data == 0 then
+        warn("[ACTED AssetLoader] HttpGet a întors date goale pentru " .. url)
+        return false
+    end
+    -- detectare rapidă: dacă GitHub a întors o pagină HTML (404 / link greșit) în loc de imagine
+    if data:sub(1, 15):find("<") then
+        warn("[ACTED AssetLoader] URL-ul nu pare să fie o imagine validă (pare HTML/404): " .. url)
+        return false
+    end
+    local ok2, err2 = pcall(writefile, path, data)
+    if not ok2 then
+        warn("[ACTED AssetLoader] writefile a eșuat pentru " .. path .. " -> " .. tostring(err2))
+    end
     return ok2
 end
 
@@ -111,6 +126,7 @@ function AssetLoader.Get(url, callback)
 
     if not (SUPPORTS_HTTPGET and SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then
         -- Executorul nu suportă asset loading custom -> fallback direct
+        warn("[ACTED AssetLoader] Executorul nu suportă HttpGet/writefile/getcustomasset. Se folosește fallback pentru: " .. url)
         AssetLoader._cache[url] = FALLBACK_IMAGE
         if callback then callback(FALLBACK_IMAGE) end
         return FALLBACK_IMAGE
@@ -136,6 +152,8 @@ function AssetLoader.Get(url, callback)
         local ok, asset = pcall(getcustomasset, path)
         if ok and asset then
             finalImage = asset
+        else
+            warn("[ACTED AssetLoader] getcustomasset a eșuat pentru " .. path .. " -> " .. tostring(asset))
         end
         AssetLoader._cache[url] = finalImage
         if callback then callback(finalImage) end
@@ -461,7 +479,15 @@ function ACTED:CreateWindow(config)
         Image = FALLBACK_IMAGE, ScaleType = Enum.ScaleType.Fit, ZIndex = 12,
     })
     -- 🧩 Logo descărcat automat de pe GitHub (vezi ASSET_URLS.Logo de sus)
-    AssetLoader.Apply(LogoImage, LogoUrl)
+    AssetLoader.Get(LogoUrl, function(realImage)
+        if not LogoImage or not LogoImage.Parent then return end
+        if realImage == FALLBACK_IMAGE then
+            warn("[ACTED] Logo nu a putut fi încărcat de la: " .. tostring(LogoUrl) .. " — verifică link-ul raw și că repo-ul e public.")
+        end
+        LogoImage.ImageTransparency = 1
+        LogoImage.Image = realImage
+        Tween(LogoImage, {ImageTransparency = 0}, 0.35)
+    end)
 
     spawn(function()
         local angle = 0
@@ -764,12 +790,17 @@ function ACTED:CreateWindow(config)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
 
         if iconIsImage then
+            local IconHolder = Create("Frame", {
+                Parent = TabBtn, Size = UDim2.new(0, 20, 0, 20),
+                Position = UDim2.new(0, 8, 0.5, -10),
+                BackgroundTransparency = 1, ZIndex = 4,
+            })
             local TabIcon = Create("ImageLabel", {
-                Parent = TabBtn, Size = UDim2.new(0, 18, 0, 18),
-                Position = UDim2.new(0, 8, 0.5, -9),
+                Parent = IconHolder, Size = UDim2.new(1, 0, 1, 0),
                 BackgroundTransparency = 1, Image = FALLBACK_IMAGE,
                 ScaleType = Enum.ScaleType.Fit, ZIndex = 4,
             })
+            Create("UIAspectRatioConstraint", {Parent = TabIcon, AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height})
             AssetLoader.Apply(TabIcon, iconUrl)
         end
 
@@ -1481,18 +1512,34 @@ function ACTED:CreateWindow(config)
         cfg = cfg or {}
         local tabData = {_sections = {}}
 
+        local creditsIconUrl = cfg.icon or ASSET_URLS.Tabs.Credit
+
         local TabBtn = Create("TextButton", {
             Parent = TabBar,
             Size   = UDim2.new(1, 0, 0, 36),
             BackgroundColor3 = Theme.SurfaceAlt,
             BackgroundTransparency = 0.4,
-            Text   = "✦ Credits",
+            Text   = creditsIconUrl and "      Credits" or "Credits",
             TextColor3 = Theme.TextSecondary,
             Font = Enum.Font.GothamSemibold, TextSize = 12,
             AutoButtonColor = false, ZIndex = 3,
         })
         AddCorner(TabBtn, 8)
         local tabStroke = AddStroke(TabBtn, Theme.Border, 1, 0.5)
+
+        if creditsIconUrl then
+            local IconHolder = Create("Frame", {
+                Parent = TabBtn, Size = UDim2.new(0, 20, 0, 20),
+                Position = UDim2.new(0, 8, 0.5, -10),
+                BackgroundTransparency = 1, ZIndex = 4,
+            })
+            local TabIcon = Create("ImageLabel", {
+                Parent = IconHolder, Size = UDim2.new(1, 0, 1, 0),
+                BackgroundTransparency = 1, Image = FALLBACK_IMAGE,
+                ScaleType = Enum.ScaleType.Fit, ZIndex = 4,
+            })
+            AssetLoader.Apply(TabIcon, creditsIconUrl)
+        end
 
         local Page = Create("ScrollingFrame", {
             Parent = ContentHolder,
@@ -1886,7 +1933,7 @@ function ACTED:CreateWindow(config)
         local FooterLabel = Create("TextLabel", {
             Parent = Footer, Size = UDim2.new(1, 0, 1, 0),
             BackgroundTransparency = 1,
-            Text = "✦  made with ACTED  •  " .. (cfg.discord and cfg.discord.url or "discord.gg/acted") .. "  ✦",
+            Text = "made with ACTED  •  " .. (cfg.discord and cfg.discord.url or "discord.gg/acted"),
             TextColor3 = Theme.TextDim, Font = Enum.Font.GothamMedium, TextSize = 10, ZIndex = 4,
         })
         spawn(function()
