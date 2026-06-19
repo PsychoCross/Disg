@@ -24,9 +24,20 @@ local LocalPlayer = Players.LocalPlayer
 -- Blob links (github.com/user/repo/blob/...) will NOT work.
 -- Use raw links (raw.githubusercontent.com/user/repo/main/...)
 -- ============================================================
+-- Automatically rewrites a GitHub "blob" view link (github.com/u/r/blob/...)
+-- into the equivalent raw.githubusercontent.com link, so pasting a normal
+-- GitHub URL by mistake doesn't silently break asset loading.
+local function NormalizeAssetUrl(url)
+    if type(url) ~= "string" then return url end
+    local user, repo, branch, path = url:match("^https?://github%.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)$")
+    if user then
+        return ("https://raw.githubusercontent.com/%s/%s/%s/%s"):format(user, repo, branch, path)
+    end
+    return url
+end
+
 local ASSET_URLS = {
-    -- FIX: Changed blob URL to raw URL for the logo
-    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/2f14059370f0f119fc38ea4907ec26d7.gif",
+    Logo = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_13-11-05-647.jpg",
 
     Tabs = {
         Main      = "https://raw.githubusercontent.com/PsychoCross/Disg/main/Picsart_26-06-19_12-03-02-397.png",
@@ -81,6 +92,7 @@ local FALLBACK_IMAGE = "rbxassetid://131583568098851"
 local AssetLoader = {}
 AssetLoader._cache   = {}  -- url -> final image string
 AssetLoader._pending = {}  -- url -> list of callbacks waiting on an in-flight download
+AssetLoader._failed  = {}  -- url -> true, for URLs that never produced a valid image
 AssetLoader._total   = 0   -- how many unique loads have been requested
 AssetLoader._loaded  = 0   -- how many have finished (success or fail)
 
@@ -167,6 +179,7 @@ function AssetLoader.Get(url, callback)
         if callback then callback(FALLBACK_IMAGE) end
         return FALLBACK_IMAGE
     end
+    url = NormalizeAssetUrl(url)
 
     -- Already cached — instant, doesn't count toward load progress
     if AssetLoader._cache[url] then
@@ -185,9 +198,10 @@ function AssetLoader.Get(url, callback)
     -- Count this as a pending load
     AssetLoader._total = AssetLoader._total + 1
 
-    local function Finish(result)
+    local function Finish(result, failed)
         AssetLoader._cache[url] = result
         AssetLoader._loaded     = AssetLoader._loaded + 1
+        if failed then AssetLoader._failed[url] = true end
         local cbs = AssetLoader._pending[url] or {}
         AssetLoader._pending[url] = nil
         for _, cb in ipairs(cbs) do pcall(cb, result) end
@@ -203,20 +217,29 @@ function AssetLoader.Get(url, callback)
     local path = UrlToFileName(url)
 
     task.spawn(function()
-        -- Use cached file on disk if it exists AND is a valid image
-        local needsDownload = true
-        pcall(function() needsDownload = not isfile(path) end)
-        if not needsDownload and not IsCachedFileValid(path) then
-            needsDownload = true
-        end
+        local ok, err = pcall(function()
+            -- Use cached file on disk if it exists AND is a valid image
+            local needsDownload = true
+            pcall(function() needsDownload = not isfile(path) end)
+            if not needsDownload and not IsCachedFileValid(path) then
+                needsDownload = true
+            end
 
-        if needsDownload then
-            local ok = DownloadTo(url, path)
-            if not ok then Finish(FALLBACK_IMAGE); return end
-        end
+            if needsDownload then
+                local good = DownloadTo(url, path)
+                if not good then Finish(FALLBACK_IMAGE, true); return end
+            end
 
-        local ok, asset = pcall(getcustomasset, path)
-        Finish((ok and asset) and asset or FALLBACK_IMAGE)
+            local ok2, asset = pcall(getcustomasset, path)
+            Finish((ok2 and asset) and asset or FALLBACK_IMAGE, not (ok2 and asset))
+        end)
+        if not ok then
+            -- Guarantees Finish() always runs, even if something above
+            -- throws unexpectedly — otherwise _loaded would never catch
+            -- up to _total and the loading screen would hang forever.
+            warn("[ACTED] Unexpected error loading asset: " .. tostring(url) .. " -> " .. tostring(err))
+            Finish(FALLBACK_IMAGE, true)
+        end
     end)
 
     return FALLBACK_IMAGE
@@ -227,8 +250,9 @@ end
 -- the player has already downloaded everything before.
 function AssetLoader.AllCached(urls)
     if not (SUPPORTS_FS and SUPPORTS_CUSTOMASSET) then return false end
-    for _, url in ipairs(urls) do
-        if url and url ~= "" then
+    for _, rawUrl in ipairs(urls) do
+        if rawUrl and rawUrl ~= "" then
+            local url = NormalizeAssetUrl(rawUrl)
             local path, exists = UrlToFileName(url), false
             pcall(function() exists = isfile(path) end)
             if not exists or not IsCachedFileValid(path) then return false end
@@ -503,12 +527,13 @@ local function CreateLoadingScreen(screenGui, opts)
         }),
     })
 
-    -- Center card
+    -- Center card (AnchorPoint keeps it centred while the size tweens in)
     local CardFinalSize = UDim2.new(0, 300, 0, 210)
     local Card = Create("Frame", {
         Parent           = Bg,
+        AnchorPoint      = Vector2.new(0.5, 0.5),
         Size             = UDim2.new(0, 240, 0, 168),
-        Position         = UDim2.new(0.5, -150, 0.5, -105),
+        Position         = UDim2.new(0.5, 0, 0.5, 0),
         BackgroundColor3 = Theme.Surface,
         BackgroundTransparency = 1,
         ZIndex           = 5,
@@ -670,7 +695,7 @@ local function CreateLoadingScreen(screenGui, opts)
         dismissed = true
         if onComplete then pcall(onComplete) end
         -- Animate out: card slides up, overlay fades
-        Tween(Card, {Position = UDim2.new(0.5,-150,0.4,-105), BackgroundTransparency = 1}, 0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        Tween(Card, {Position = UDim2.new(0.5,0,0.4,0), BackgroundTransparency = 1}, 0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         Tween(Bg,   {BackgroundTransparency = 1}, 0.65, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
         for _, c in ipairs(Card:GetDescendants()) do
             if c:IsA("TextLabel") or c:IsA("TextButton") then
@@ -684,42 +709,50 @@ local function CreateLoadingScreen(screenGui, opts)
         end)
     end
 
-    -- Progress update loop
+    -- Progress update loop. Wrapped in pcall so any unexpected runtime
+    -- error inside it can't silently kill the coroutine and leave the
+    -- screen stuck (that previously left no way for Dismiss() to fire).
     spawn(function()
-        local timeout = 25  -- max wait in seconds (covers a full first-time download of all assets)
+        local timeout = 18  -- max wait in seconds
         local elapsed = 0
         while not dismissed do
             task.wait(0.05)
             elapsed = elapsed + 0.05
 
-            local total  = AssetLoader._total
-            local loaded = AssetLoader._loaded
-            local pct    = (total > 0) and (loaded / total) or 0
+            local ok = pcall(function()
+                local total  = AssetLoader._total
+                local loaded = AssetLoader._loaded
+                local pct    = (total > 0) and (loaded / total) or 0
 
-            -- Update UI
-            local pctInt = math.floor(pct * 100)
-            CountLabel.Text  = loaded .. " / " .. total .. " assets"
-            StatusLabel.Text = (pct >= 1 and total > 0) and "✓ Ready!" or ("Loading assets... " .. pctInt .. "%")
-            if pct >= 1 and total > 0 then
-                StatusLabel.TextColor3 = Theme.Success
-            end
-            Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
-
-            -- Dismiss when all loaded or timed out (or there was simply
-            -- nothing to load, e.g. no assets configured)
-            local allDone = (total > 0 and loaded >= total)
-            local nothingToLoad = (total == 0 and elapsed >= 1.5)
-            if allDone or nothingToLoad or elapsed >= timeout then
-                -- If all done, show 100% briefly before dismissing
-                if allDone then
-                    Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
-                    task.wait(0.55)
+                -- Update UI
+                local pctInt = math.floor(pct * 100)
+                CountLabel.Text  = loaded .. " / " .. total .. " assets"
+                StatusLabel.Text = (pct >= 1 and total > 0) and "✓ Ready!" or ("Loading assets... " .. pctInt .. "%")
+                if pct >= 1 and total > 0 then
+                    StatusLabel.TextColor3 = Theme.Success
                 end
-                Dismiss()
-                break
-            end
+                Tween(ProgFill, {Size = UDim2.new(math.max(pct, 0.02), 0, 1, 0)}, 0.25, Enum.EasingStyle.Quart)
+
+                -- Dismiss when all loaded, or there was simply nothing to
+                -- load (e.g. no assets configured)
+                local allDone = (total > 0 and loaded >= total)
+                local nothingToLoad = (total == 0 and elapsed >= 1.5)
+                if allDone or nothingToLoad then
+                    if allDone then
+                        Tween(ProgFill, {Size = UDim2.new(1, 0, 1, 0)}, 0.3, Enum.EasingStyle.Quart)
+                        task.wait(0.55)
+                    end
+                    Dismiss()
+                end
+            end)
+            if not ok or dismissed or elapsed >= timeout then break end
         end
     end)
+
+    -- Hard failsafe: no matter what goes wrong above (a download that
+    -- hangs forever, an executor quirk, an unforeseen error), the loading
+    -- screen is GUARANTEED to close within this many seconds.
+    task.delay(20, Dismiss)
 
     return {Dismiss = Dismiss}
 end
@@ -2139,6 +2172,20 @@ function ACTED:CreateWindow(config)
     -- First boot notification (delayed so loading screen shows first)
     task.delay(1.2, function()
         Window:Notify("ACTED", "Core modules loaded successfully.", "success", 3)
+    end)
+
+    -- If any icon/logo URL failed to download (404, wrong filename, not a
+    -- raw.githubusercontent link, etc.), surface it instead of failing
+    -- silently — check the developer console (F9) for the exact URLs.
+    task.delay(2.2, function()
+        local failedCount = 0
+        for _ in pairs(AssetLoader._failed) do failedCount = failedCount + 1 end
+        if failedCount > 0 then
+            Window:Notify("Assets", failedCount.." image(s) failed to load — check console (F9) for the broken URLs.", "warning", 5)
+            for url in pairs(AssetLoader._failed) do
+                warn("[ACTED] Broken asset URL: " .. url)
+            end
+        end
     end)
 
     return Window
